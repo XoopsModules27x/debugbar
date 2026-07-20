@@ -11,10 +11,10 @@ $adminObject = \Xmf\Module\Admin::getInstance();
 xoops_cp_header();
 $adminObject->displayNavigation(basename(__FILE__));
 
-$catalog = new LogCatalog(
-    defined('XOOPS_VAR_PATH') ? XOOPS_VAR_PATH . '/logs' : '',
-    XOOPS_ROOT_PATH . '/log/log.txt'
-);
+$varPath = defined('XOOPS_VAR_PATH') && XOOPS_VAR_PATH !== ''
+    ? XOOPS_VAR_PATH
+    : XOOPS_ROOT_PATH . '/xoops_data';
+$catalog = new LogCatalog($varPath . '/logs', XOOPS_ROOT_PATH . '/log/log.txt');
 $esc = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 $requested = Request::getString('file', '', 'GET');
 $cssFile = XOOPS_ROOT_PATH . '/modules/debugbar/assets-custom/admin-logs.css';

@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Replaced the EXPLAIN HMAC fallback with a dedicated random signing key under protected XOOPS variable data; EXPLAIN now fails closed when that key is unavailable.
 - Changed EXPLAIN failures to return a generic client response while recording details through the server-side XOOPS logging path.
 - Hardened dumped-value and email-preview rendering against markup injection and external tracking-resource loads.
+- Restricted on-demand EXPLAIN to one syntactically complete, read-only `SELECT`, including CTEs whose top-level statement is `SELECT`; writable CTEs, stacked statements, and file-output clauses are rejected.
 
 ### Fixed
 
@@ -24,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Corrected dark-mode syntax-highlighting and VarDumper selector/line-height behavior.
 - Prevented scalar HTTP details, template names, and template parameters from being interpreted as HTML in browser widgets.
 - Made profile-table detection escape SQL `LIKE` wildcards and made vendor-asset corrections detect source drift instead of silently succeeding.
+- Prevented an unavailable Monolog directory from degrading into a filesystem-root glob and added the standard XOOPS data-directory fallback.
 
 ### Changed
 
@@ -37,6 +39,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Made the optional Tracy administration control conditional on an explicit host-bootstrap capability.
 - Clarified effective toolbar status when XOOPS Debug is disabled.
 - Added persistent post-copy corrections for affected vendor assets and completed the standalone XOOPS/XMF PHPStan stubs.
+- Focused Sonar analysis on authored sources by excluding generated browser-asset mirrors and declarative manifest duplication.
 
 ### Documentation
 

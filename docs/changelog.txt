@@ -6,6 +6,7 @@
 - Added one bounded recursive sanitizer for request metadata, URLs and cURL output, cookies, headers, HTTP/mail records, xWhoops snapshots, Profiler data, and Smarty variables.
 - Replaced the EXPLAIN HMAC fallback with a dedicated random signing key under protected XOOPS variable data; EXPLAIN now fails closed when that key is unavailable.
 - Changed EXPLAIN failures to return a generic client response while recording details through the server-side XOOPS logging path.
+- Restricted on-demand EXPLAIN to one syntactically complete, read-only `SELECT`, including CTEs whose top-level statement is `SELECT`; writable CTEs, stacked statements, and file-output clauses are rejected.
 
 <h5>Fixed</h5>
 
@@ -14,6 +15,7 @@
 - Kept malformed optional Ray channel metadata from escaping the integration boundary.
 - Corrected Diagnostics to prefer the canonical `php-debugbar/php-debugbar` Composer package name.
 - Removed the unavailable web-vitals placeholder from the compatibility Analytics page.
+- Prevented an unavailable Monolog directory from degrading into a filesystem-root glob and added the standard XOOPS data-directory fallback.
 
 <h5>Changed</h5>
 - Bumped module metadata to 1.3.0; existing installations must run the XOOPS module update.
@@ -25,6 +27,7 @@
 - Updated the optional Ray guide to match current module defaults, capability checks, and installation guidance.
 - Made the optional Tracy administration control conditional on an explicit host-bootstrap capability.
 - Clarified effective toolbar status when XOOPS Debug is disabled.
+- Focused Sonar analysis on authored sources by excluding generated browser-asset mirrors and declarative manifest duplication.
 
 <h5>Documentation</h5>
 

@@ -1,6 +1,6 @@
 {
     "name": "xoopsmodules27x/debugbar",
-    "description": "Standard DevOps baseline for XOOPS modules — GitHub config, CI, Dependabot, and quality tooling (PHPStan, PHP-CS-Fixer, Rector, PHPUnit).",
+    "description": "XOOPS DebugBar module providing administrator-only request diagnostics, profiling, performance analytics, log inspection, and optional developer-tool integrations.",
     "type": "xoops-module",
     "license": "GPL-2.0-or-later",
     "homepage": "https://xoops.org",

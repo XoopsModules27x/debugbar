@@ -48,12 +48,13 @@ if (!$xoopsTokenValid && !$signedTokenValid) {
 $sql = \Xmf\Request::getString('sql', '', 'POST');
 $sql = trim($sql);
 
-// EXPLAIN is deliberately restricted to read-only query forms. The original
-// query is captured from the admin-only Debugbar context, but it is still
-// treated as request input at this endpoint.
-if ($sql === '' || strlen($sql) > 100000 || !preg_match('/^(SELECT|WITH)\b/i', $sql) || preg_match('/;\s*\S/', $sql)) {
+// EXPLAIN is deliberately restricted to one read-only SELECT. For CTEs, the
+// classifier identifies the top-level statement after all CTE definitions;
+// quoted keywords and nested SELECTs cannot disguise a writable statement.
+if ($sql === '' || strlen($sql) > 100000
+    || !\XoopsModules\Debugbar\Analysis\SqlStatementClassifier::isReadOnlySelect($sql)) {
     http_response_code(400);
-    echo json_encode(['error' => 'Only a single SELECT or WITH query can be explained']);
+    echo json_encode(['error' => 'Only a single read-only SELECT or WITH ... SELECT query can be explained']);
     exit;
 }
 

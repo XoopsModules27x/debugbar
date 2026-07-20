@@ -45,7 +45,7 @@ function xoops_module_update_debugbar($module, $previousVersion)
 /** Create the optional EXPLAIN signing key without making module setup fatal. */
 function _debugbar_ensure_explain_secret(): bool
 {
-    require_once XOOPS_ROOT_PATH . '/modules/debugbar/class/ExplainSecretStore.php';
+    require_once dirname(__DIR__) . '/class/ExplainSecretStore.php';
 
     try {
         $ready = (new \XoopsModules\Debugbar\ExplainSecretStore())->ensure();

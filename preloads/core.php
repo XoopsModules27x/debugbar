@@ -309,7 +309,11 @@ class DebugbarCorePreload extends XoopsPreloadItem
         if (!in_array($level, $levels, true)) {
             $level = 'warning';
         }
-        require_once XOOPS_ROOT_PATH . '/class/logger/monologlogger.php';
+        $adapterFile = XOOPS_ROOT_PATH . '/class/logger/monologlogger.php';
+        if (!is_file($adapterFile)) {
+            return;
+        }
+        require_once $adapterFile;
         $adapter = new \XoopsMonologLogger('xoops', [], [], $level);
         if ($adapter->isActive()) {
             self::xoopsLogger()->addLogger($adapter);

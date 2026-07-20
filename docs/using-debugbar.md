@@ -83,7 +83,7 @@ The Queries collector records SQL sent through the XOOPS logger.
 
 Repeated queries with the same shape often indicate an N+1 problem: code loads a list and then runs another query for every item. Replace that pattern with a join, a bulk lookup, or preloaded handler data.
 
-An **EXPLAIN** action can appear beside a recorded read-only query. It is administrator-only, token-protected, and accepts only a single `SELECT` or `WITH` statement. Use its output to look for full table scans, temporary tables, filesorts, and missing indexes. It never executes an `INSERT`, `UPDATE`, or `DELETE` through this interface.
+An **EXPLAIN** action can appear beside a recorded read-only query. It is administrator-only, token-protected, and accepts only one `SELECT`, or a `WITH` query whose top-level statement is `SELECT`. Writable CTEs, stacked statements, and `INTO OUTFILE`/`INTO DUMPFILE` are rejected. Use its output to look for full table scans, temporary tables, filesorts, and missing indexes.
 
 ### Messages, exceptions, and deprecations
 

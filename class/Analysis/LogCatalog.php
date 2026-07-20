@@ -17,12 +17,15 @@ final class LogCatalog
     public function listFiles(): array
     {
         $files = [];
-        foreach (glob(rtrim($this->monologDirectory, '/\\') . '/xoops*.log') ?: [] as $path) {
-            $name = basename($path);
-            if (!$this->isMonologName($name) || !is_file($path)) {
-                continue;
+        $directory = rtrim($this->monologDirectory, '/\\');
+        if ($directory !== '' && is_dir($directory)) {
+            foreach (glob($directory . '/xoops*.log') ?: [] as $path) {
+                $name = basename($path);
+                if (!$this->isMonologName($name) || !is_file($path)) {
+                    continue;
+                }
+                $files[] = ['source' => 'monolog', 'file' => $name, 'modified' => (int) filemtime($path), 'size' => (int) filesize($path)];
             }
-            $files[] = ['source' => 'monolog', 'file' => $name, 'modified' => (int) filemtime($path), 'size' => (int) filesize($path)];
         }
         if ($this->legacyFile !== null && is_file($this->legacyFile)) {
             $files[] = ['source' => 'legacy', 'file' => 'legacy', 'modified' => (int) filemtime($this->legacyFile), 'size' => (int) filesize($this->legacyFile)];
@@ -63,6 +66,9 @@ final class LogCatalog
             return null;
         }
         if (!$this->isMonologName($file)) {
+            return null;
+        }
+        if ($this->monologDirectory === '') {
             return null;
         }
         $directory = realpath($this->monologDirectory);
