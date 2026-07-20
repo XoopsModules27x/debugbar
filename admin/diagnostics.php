@@ -20,7 +20,7 @@ echo '<link rel="stylesheet" href="'
 
 $report = (new SystemDiagnostics(
     XOOPS_ROOT_PATH,
-    defined('XOOPS_VAR_PATH') ? XOOPS_VAR_PATH : XOOPS_ROOT_PATH . '/xoops_data'
+    (defined('XOOPS_VAR_PATH') && XOOPS_VAR_PATH !== '') ? XOOPS_VAR_PATH : XOOPS_ROOT_PATH . '/xoops_data'
 ))->collect(is_array($GLOBALS['xoopsConfig'] ?? null) ? $GLOBALS['xoopsConfig'] : []);
 
 $sections = [
