@@ -22,6 +22,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Removed the unavailable web-vitals placeholder from the compatibility Analytics page.
 - Fixed AJAX editor links, failed OpenHandler requests, blocked mail-preview popups, falsy toolbar values, and late `Server-Timing` headers.
 - Corrected dark-mode syntax-highlighting and VarDumper selector/line-height behavior.
+- Prevented scalar HTTP details, template names, and template parameters from being interpreted as HTML in browser widgets.
+- Made profile-table detection escape SQL `LIKE` wildcards and made vendor-asset corrections detect source drift instead of silently succeeding.
 
 ### Changed
 

@@ -54,6 +54,22 @@
     };
 
     /**
+     * Render diagnostic values without interpreting scalar strings as HTML.
+     * Structured dump objects still use the interactive VarDumper renderer.
+     *
+     * @param {HTMLElement} el
+     * @param {*} value
+     */
+    PhpDebugBar.Widgets.renderSafeValueInto = function (el, value) {
+        if (value !== null && typeof value === 'object') {
+            PhpDebugBar.Widgets.renderValueInto(el, value);
+            return;
+        }
+
+        el.textContent = value == null ? '' : String(value);
+    };
+
+    /**
      * Creates html editor link span
      *
      * @param  {Object} value

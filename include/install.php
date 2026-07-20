@@ -172,6 +172,10 @@ function _debugbar_patch_vendor_assets(string $destDir): bool
     $patches = [
         'openhandler.js' => [
             [
+                "(function () {\n    const csscls = function (cls) {",
+                "(function () {\n    if (typeof PhpDebugBar === 'undefined') {\n        return;\n    }\n\n    const csscls = function (cls) {",
+            ],
+            [
                 "        handleFind(data) {\n            const self = this;",
                 "        handleFind(data) {\n            if (!Array.isArray(data)) {\n                return;\n            }\n            const self = this;",
             ],
@@ -216,34 +220,63 @@ function _debugbar_patch_vendor_assets(string $destDir): bool
                 "                        documentToWriteTo.write(\n                            '<meta http-equiv=\"Content-Security-Policy\" content=\"default-src \\'none\\'; img-src data:; style-src \\'unsafe-inline\\';\">'\n                            + headersHTML + bodyHTML + htmlIframeHTML\n                        );",
             ],
         ],
+        'widgets/http/widget.js' => [
+            [
+                '                            PhpDebugBar.Widgets.renderValueInto(valueTd, request.details[key]);',
+                '                            PhpDebugBar.Widgets.renderSafeValueInto(valueTd, request.details[key]);',
+            ],
+        ],
+        'widgets/templates/widget.js' => [
+            [
+                "                if (tpl.html) {\n                    name.innerHTML = tpl.html;\n                } else {\n                    name.textContent = tpl.name;\n                }",
+                "                name.textContent = String(tpl.name ?? tpl.html ?? '');",
+            ],
+            [
+                '                            PhpDebugBar.Widgets.renderValueInto(valueTd, tpl.params[key]);',
+                '                            PhpDebugBar.Widgets.renderSafeValueInto(valueTd, tpl.params[key]);',
+            ],
+        ],
     ];
 
+    $success = true;
     foreach ($patches as $relativePath => $replacements) {
         $path = $destDir . '/' . $relativePath;
         if (!is_file($path) || !is_readable($path)) {
             trigger_error('DebugBar asset patch skipped unreadable file: ' . $relativePath, E_USER_WARNING);
-
-            return false;
+            $success = false;
+            continue;
         }
 
         $contents = file_get_contents($path);
         if (!is_string($contents)) {
-            return false;
+            trigger_error('DebugBar asset patch could not read file: ' . $relativePath, E_USER_WARNING);
+            $success = false;
+            continue;
         }
 
         $patched = $contents;
         foreach ($replacements as [$search, $replacement]) {
-            $patched = str_replace($search, $replacement, $patched);
+            if (str_contains($patched, $search)) {
+                $patched = str_replace($search, $replacement, $patched);
+                continue;
+            }
+
+            // Keep direct calls idempotent while still detecting vendor drift.
+            if (str_contains($patched, $replacement)) {
+                continue;
+            }
+
+            trigger_error('DebugBar asset patch target not found in ' . $relativePath, E_USER_WARNING);
+            $success = false;
         }
 
         if ($patched !== $contents && false === file_put_contents($path, $patched)) {
             trigger_error('DebugBar asset patch could not write file: ' . $relativePath, E_USER_WARNING);
-
-            return false;
+            $success = false;
         }
     }
 
-    return true;
+    return $success;
 }
 
 /**

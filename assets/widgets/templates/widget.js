@@ -20,11 +20,7 @@
             this.list = new PhpDebugBar.Widgets.ListWidget({ itemRenderer(li, tpl) {
                 const name = document.createElement('span');
                 name.classList.add(csscls('name'));
-                if (tpl.html) {
-                    name.innerHTML = tpl.html;
-                } else {
-                    name.textContent = tpl.name;
-                }
+                name.textContent = String(tpl.name ?? tpl.html ?? '');
                 li.append(name);
 
                 if (tpl.xdebug_link) {
@@ -87,7 +83,7 @@
 
                             const valueTd = document.createElement('td');
                             valueTd.className = csscls('value');
-                            PhpDebugBar.Widgets.renderValueInto(valueTd, tpl.params[key]);
+                            PhpDebugBar.Widgets.renderSafeValueInto(valueTd, tpl.params[key]);
                             row.append(valueTd);
                             tbody.append(row);
                         }

@@ -91,7 +91,7 @@ debugbar/
 
 ## Generated browser assets
 
-`assets/` contains the web-readable PHP DebugBar distribution copied during module install/update. After that copy, the six files from `assets-custom/` are overlaid so XOOPS-specific toolbar, Analytics, Logs, and Diagnostics behavior remains intact. The installer then applies a small, explicit set of compatibility and security corrections to vendor-owned files that are not duplicated in the overlay. Do not hand-edit generated copies in `assets/`; edit `assets-custom/` for module-owned files or update the post-copy patch list in `include/install.php` for a vendor-owned file, then run the XOOPS module update.
+`assets/` contains the web-readable PHP DebugBar distribution copied during module install/update. After that copy, the six files from `assets-custom/` are overlaid so XOOPS-specific toolbar, Analytics, Logs, and Diagnostics behavior remains intact. The installer then applies a small, explicit set of compatibility and security corrections to vendor-owned files that are not duplicated in the overlay. Every transformation accepts an already-corrected file but fails the update when neither the expected vendor source nor the corrected form is found, preventing silent vendor drift. Do not hand-edit generated copies in `assets/`; edit `assets-custom/` for module-owned files or update the guarded post-copy patch list in `include/install.php` for a vendor-owned file, then run the XOOPS module update.
 
 ## Tests
 

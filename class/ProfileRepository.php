@@ -40,7 +40,9 @@ final class ProfileRepository
             return $this->tableExists = false;
         }
         try {
-            $result = $db->query('SHOW TABLES LIKE ' . $db->quote($this->table($db)));
+            $table = addcslashes($this->table($db), "\\%_");
+            $sql = 'SHOW TABLES LIKE ' . $db->quote($table);
+            $result = $db->query($sql);
             return $this->tableExists = $db->isResultSet($result)
                 && $result instanceof \mysqli_result
                 && false !== $db->fetchRow($result);
