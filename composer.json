@@ -1,24 +1,24 @@
 {
-    "name": "xoopsmodules/module-devops",
+    "name": "xoopsmodules27x/debugbar",
     "description": "Standard DevOps baseline for XOOPS modules — GitHub config, CI, Dependabot, and quality tooling (PHPStan, PHP-CS-Fixer, Rector, PHPUnit).",
     "type": "xoops-module",
     "license": "GPL-2.0-or-later",
     "homepage": "https://xoops.org",
     "support": {
-        "issues": "https://github.com/XoopsModules27x/module-devops/issues",
-        "source": "https://github.com/XoopsModules27x/module-devops"
+        "issues": "https://github.com/XoopsModules27x/debugbar/issues",
+        "source": "https://github.com/XoopsModules27x/debugbar"
     },
     "require": {
         "php": ">=8.2"
     },
     "autoload": {
         "psr-4": {
-            "XoopsModules\\Yourmodule\\": "class/"
+            "XoopsModules\\Debugbar\\": "class/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "XoopsModules\\Yourmodule\\Tests\\": "tests/"
+            "XoopsModules\\Debugbar\\Tests\\": "tests/"
         }
     },
     "config": {

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace XoopsModules\Yourmodule\Tests\Unit;
+namespace XoopsModules\Debugbar\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 
