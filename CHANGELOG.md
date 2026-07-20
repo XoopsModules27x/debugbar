@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added one bounded recursive sanitizer for request metadata, URLs and cURL output, cookies, headers, HTTP/mail records, xWhoops snapshots, Profiler data, and Smarty variables.
 - Replaced the EXPLAIN HMAC fallback with a dedicated random signing key under protected XOOPS variable data; EXPLAIN now fails closed when that key is unavailable.
 - Changed EXPLAIN failures to return a generic client response while recording details through the server-side XOOPS logging path.
+- Hardened dumped-value and email-preview rendering against markup injection and external tracking-resource loads.
 
 ### Fixed
 
@@ -19,6 +20,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Kept malformed optional Ray channel metadata from escaping the integration boundary.
 - Corrected Diagnostics to prefer the canonical `php-debugbar/php-debugbar` Composer package name.
 - Removed the unavailable web-vitals placeholder from the compatibility Analytics page.
+- Fixed AJAX editor links, failed OpenHandler requests, blocked mail-preview popups, falsy toolbar values, and late `Server-Timing` headers.
+- Corrected dark-mode syntax-highlighting and VarDumper selector/line-height behavior.
 
 ### Changed
 
@@ -31,6 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Updated the optional Ray guide to match current module defaults, capability checks, and installation guidance.
 - Made the optional Tracy administration control conditional on an explicit host-bootstrap capability.
 - Clarified effective toolbar status when XOOPS Debug is disabled.
+- Added persistent post-copy corrections for affected vendor assets and completed the standalone XOOPS/XMF PHPStan stubs.
 
 ### Documentation
 

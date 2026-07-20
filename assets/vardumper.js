@@ -201,7 +201,7 @@
             if (typeof v === 'boolean') return String(v);
             if (typeof v === 'number') return String(v);
             if (typeof v === 'object') {
-                if (v._vd) return (v._vd[2] || '') + ' {…}';
+                if (v._vd) return this.esc(v._vd[2] || '') + ' {…}';
                 return Array.isArray(v) ? '[…]' : '{…}';
             }
             return '…';

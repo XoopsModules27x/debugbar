@@ -17,7 +17,7 @@ require_once __DIR__ . '/preloads/autoloader.php';
 
 // This endpoint must return JSON only; suppress the legacy XOOPS logger's
 // diagnostic HTML, which otherwise gets appended to the response body.
-if (isset($GLOBALS['xoopsLogger']) && is_object($GLOBALS['xoopsLogger'])) {
+if (isset($GLOBALS['xoopsLogger']) && $GLOBALS['xoopsLogger'] instanceof \XoopsLogger) {
     $GLOBALS['xoopsLogger']->renderingEnabled = false;
     // If common.php already installed its output-buffer callback, disabling
     // only the flag is insufficient: render() also checks activated.

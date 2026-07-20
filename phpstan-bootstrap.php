@@ -24,5 +24,15 @@ if (! defined('XOOPS_URL')) {
 if (! defined('_CHARSET')) {
     define('_CHARSET', 'utf-8');
 }
+if (! defined('XOOPS_CONF')) {
+    define('XOOPS_CONF', 1);
+}
+if (! defined('_AM_MODULEADMIN_ADMIN_FOOTER')) {
+    define('_AM_MODULEADMIN_ADMIN_FOOTER', 'Module administration');
+}
+
+foreach (['modinfo.php', 'admin.php', 'main.php'] as $languageFile) {
+    require_once __DIR__ . '/language/english/' . $languageFile;
+}
 
 // Profile target: XoopsCore27 / PHP 8.2+

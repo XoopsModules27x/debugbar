@@ -7,6 +7,7 @@ use XoopsModules\Debugbar\Analysis\LogCatalog;
 use XoopsModules\Debugbar\Analysis\MonologLogParser;
 
 require_once __DIR__ . '/admin_header.php';
+$adminObject = \Xmf\Module\Admin::getInstance();
 xoops_cp_header();
 $adminObject->displayNavigation(basename(__FILE__));
 
@@ -56,7 +57,8 @@ if ($requested !== '') {
                 } catch (Throwable) {
                     $timestamp = $entry['timestamp'];
                 }
-                $error = isset($entry['context']['errno']) ? '#' . (string) $entry['context']['errno'] : '';
+                $error = isset($entry['context']['errno']) && is_scalar($entry['context']['errno'])
+                    ? '#' . (string) $entry['context']['errno'] : '';
                 $file = isset($entry['context']['errfile']) && is_scalar($entry['context']['errfile'])
                     ? str_replace('\\', '/', (string) $entry['context']['errfile']) : '';
                 $line = isset($entry['context']['errline']) && is_scalar($entry['context']['errline'])

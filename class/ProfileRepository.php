@@ -9,6 +9,8 @@ defined('XOOPS_ROOT_PATH') || exit('Restricted access');
 /** Persistence boundary for compact request profiles. */
 final class ProfileRepository
 {
+    private ?bool $tableExists = null;
+
     public function __construct(private readonly ?\XoopsMySQLDatabase $db = null)
     {
     }
@@ -29,12 +31,22 @@ final class ProfileRepository
 
     public function exists(): bool
     {
+        if ($this->tableExists !== null) {
+            return $this->tableExists;
+        }
+
         $db = $this->connection();
-        if ($db === null) return false;
+        if ($db === null) {
+            return $this->tableExists = false;
+        }
         try {
             $result = $db->query('SHOW TABLES LIKE ' . $db->quote($this->table($db)));
-            return $db->isResultSet($result) && $result instanceof \mysqli_result && false !== $db->fetchRow($result);
-        } catch (\Throwable) { return false; }
+            return $this->tableExists = $db->isResultSet($result)
+                && $result instanceof \mysqli_result
+                && false !== $db->fetchRow($result);
+        } catch (\Throwable) {
+            return $this->tableExists = false;
+        }
     }
 
     /** @param array<string, mixed> $row */

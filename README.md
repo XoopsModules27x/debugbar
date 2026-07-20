@@ -113,7 +113,7 @@ DebugBar is a development aid, not an application performance monitoring service
 
 ### The module is active, but the toolbar is missing
 
-Confirm all of the following:
+Confirm the following:
 
 1. You are signed in as an administrator.
 2. Global XOOPS Debug is ON.

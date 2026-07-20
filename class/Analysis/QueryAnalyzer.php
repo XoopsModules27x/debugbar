@@ -86,6 +86,6 @@ final class QueryAnalyzer
         $sql = preg_replace('/\s+/', ' ', trim($sql)) ?? $sql;
         $sql = preg_replace('/\s*([=<>])\s*/', '$1', $sql) ?? $sql;
 
-        return sha1(strtolower($sql));
+        return hash('sha256', strtolower($sql));
     }
 }

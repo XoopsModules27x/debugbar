@@ -217,7 +217,7 @@ window.PhpDebugBar = window.PhpDebugBar || {};
             }
             if (cb instanceof HTMLElement) {
                 const el = cb;
-                cb = value => el.textContent = value || '';
+                cb = value => el.textContent = value ?? '';
             }
             this._boundAttributes[attr].push(cb);
             if (this.has(attr)) {
@@ -477,7 +477,15 @@ window.PhpDebugBar = window.PhpDebugBar || {};
             this.set(options);
 
             const debugbar = this.get('debugbar');
-            this.settings = JSON.parse(localStorage.getItem('phpdebugbar-settings')) || {};
+            try {
+                const storedSettings = localStorage.getItem('phpdebugbar-settings');
+                this.settings = storedSettings ? JSON.parse(storedSettings) : {};
+                if (!this.settings || typeof this.settings !== 'object' || Array.isArray(this.settings)) {
+                    this.settings = {};
+                }
+            } catch (error) {
+                this.settings = {};
+            }
 
             for (const key in debugbar.options) {
                 if (key in this.settings) {
@@ -1810,7 +1818,17 @@ window.PhpDebugBar = window.PhpDebugBar || {};
          * @return {string}
          */
         newRequestId() {
-            return (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function' && globalThis.crypto.randomUUID()) || (String(Date.now()) + Math.random().toString(16).slice(2));
+            const cryptoApi = globalThis.crypto;
+            if (cryptoApi && typeof cryptoApi.randomUUID === 'function') {
+                return cryptoApi.randomUUID();
+            }
+            if (cryptoApi && typeof cryptoApi.getRandomValues === 'function') {
+                const bytes = new Uint8Array(16);
+                cryptoApi.getRandomValues(bytes);
+                return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+            }
+
+            return Date.now().toString(16) + performance.now().toString(16).replace('.', '');
         }
 
         /**

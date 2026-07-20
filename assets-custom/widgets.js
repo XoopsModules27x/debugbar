@@ -86,11 +86,11 @@
         if (value.url) {
             const link = document.createElement('a');
             link.classList.add(csscls('editor-link'));
-            link.setAttribute(link.ajax ? 'title' : 'href', value.url);
+            link.setAttribute(value.ajax ? 'title' : 'href', value.url);
             link.addEventListener('click', (event) => {
                 event.stopPropagation();
                 if (value.ajax) {
-                    fetch(stmt.xdebug_link.url);
+                    fetch(value.url);
                     event.preventDefault();
                 }
             });

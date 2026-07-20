@@ -11,6 +11,8 @@ use XoopsModules\Debugbar\ProfileRepository;
 
 require_once __DIR__ . '/admin_header.php';
 
+$adminObject = \Xmf\Module\Admin::getInstance();
+
 $xdebug = XdebugStatus::read();
 $cachegrindCatalog = new CachegrindCatalog($xdebug['output_dir']);
 $action = Request::getCmd('action', '', 'POST');

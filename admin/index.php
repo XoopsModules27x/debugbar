@@ -105,7 +105,12 @@ if ($action === 'set_tracy') {
     }
 
     $enabled = Request::getInt('enabled', 0, 'POST') === 1;
-    $runtimeFile = XOOPS_VAR_PATH . '/data/debug-runtime.json';
+    $runtimeBase = defined('XOOPS_VAR_PATH') ? (string) constant('XOOPS_VAR_PATH') : '';
+    if ($runtimeBase === '') {
+        redirect_header('index.php', 3, _AM_DEBUGBAR_TRACY_FAILED);
+        exit;
+    }
+    $runtimeFile = $runtimeBase . '/data/debug-runtime.json';
     try {
         $runtimeJson = json_encode(
             ['tracy_enabled' => $enabled],
@@ -146,14 +151,15 @@ if ($hasMonolog) {
     }
 }
 $assetsDir   = XOOPS_ROOT_PATH . '/modules/debugbar/assets';
-$assetsExist = \is_dir($assetsDir) && \count(\glob($assetsDir . '/*')) > 0;
+$assetFiles = \glob($assetsDir . '/*');
+$assetsExist = \is_dir($assetsDir) && \is_array($assetFiles) && \count($assetFiles) > 0;
 $hasRay      = \function_exists('ray');
 $debugMode = (int) ($GLOBALS['xoopsConfig']['debug_mode'] ?? 0);
 $xoopsDebugEnabled = in_array($debugMode, [1, 2], true);
 $debugbarPreferenceEnabled = (bool) $helper->getConfig('debugbar_enable', 1);
 $debugbarToolbarActive = $xoopsDebugEnabled && $debugbarPreferenceEnabled;
 $tracyControlAvailable = defined('XOOPS_TRACY_STATUS');
-$tracyActive = $tracyControlAvailable && XOOPS_TRACY_STATUS === 'active';
+$tracyActive = $tracyControlAvailable && constant('XOOPS_TRACY_STATUS') === 'active';
 
 $statusRows = [
     [_AM_DEBUGBAR_PHP_DEBUGBAR, $hasDebugbar ? _AM_DEBUGBAR_INSTALLED : _AM_DEBUGBAR_NOT_FOUND, $hasDebugbar ? 'green' : 'red'],
@@ -170,11 +176,10 @@ if ($tracyControlAvailable) {
 
 // Render as a single HTML table inside one info box line
 $html          = '<table style="border-collapse: collapse; width: auto;">';
-$allowedColors = ['green', 'red', 'orange', 'gray'];
 foreach ($statusRows as $row) {
     $label = \htmlspecialchars((string) $row[0], ENT_QUOTES, 'UTF-8');
     $value = \htmlspecialchars((string) $row[1], ENT_QUOTES, 'UTF-8');
-    $color = \in_array($row[2], $allowedColors, true) ? $row[2] : 'black';
+    $color = $row[2];
 
     $html .= '<tr>'
         . '<td style="padding: 2px 20px 2px 0; white-space: nowrap;">' . $label . '</td>'

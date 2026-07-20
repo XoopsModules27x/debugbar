@@ -24,7 +24,7 @@ the progress being made towards a fix and announcement.
 In addition, please include the following information along with your report:
 
 * Your name and affiliation (if any).
-* A description of the technical details of the vulnerabilities. It is very
+* A description of the technical details of the vulnerabilities. It is
   important to let us know how we can reproduce your findings.
 * Type of issue (e.g. buffer overflow, SQL injection, cross-site scripting, etc.)
 * Full paths of source file(s) related to the manifestation of the issue

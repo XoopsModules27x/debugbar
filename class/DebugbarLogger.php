@@ -198,8 +198,9 @@ class DebugbarLogger
             }
             try {
                 $this->debugbar = new StandardDebugBar();
-                $this->renderer = $this->debugbar->getJavascriptRenderer();
-                $this->renderer->setUseDistFiles(false);
+                $renderer = $this->debugbar->getJavascriptRenderer();
+                $this->renderer = $renderer;
+                $renderer->setUseDistFiles(false);
 
                 // Add custom collectors for XOOPS channels
                 $this->debugbar->addCollector(new MessagesCollector('Deprecated'));
@@ -221,16 +222,16 @@ class DebugbarLogger
                 }
 
                 // v1.x: disable jQuery (already loaded by XOOPS) and noConflict wrapping
-                $this->renderer->disableVendor('jquery');
-                if (method_exists($this->renderer, 'setEnableJqueryNoConflict')) {
-                    $this->renderer->setEnableJqueryNoConflict(false);
+                $renderer->disableVendor('jquery');
+                if (method_exists($renderer, 'setEnableJqueryNoConflict')) {
+                    $renderer->setEnableJqueryNoConflict(false);
                 }
 
                 // Set the base path and URL for debugbar assets
                 $assetsDir = dirname(__DIR__) . '/assets';
                 if (is_dir($assetsDir)) {
-                    $this->renderer->setBasePath($assetsDir);
-                    $this->renderer->setBaseUrl($this->moduleUrl() . '/assets');
+                    $renderer->setBasePath($assetsDir);
+                    $renderer->setBaseUrl($this->moduleUrl() . '/assets');
                 }
             } catch (\Throwable $e) {
                 $this->debugbar = false;
@@ -400,10 +401,6 @@ class DebugbarLogger
         }
 
         $data = $template->getTemplateVars();
-        if (!is_array($data)) {
-            return;
-        }
-
         $data = $this->sanitizer()->sanitize($data);
 
         $helper = Helper::getInstance();
@@ -852,12 +849,10 @@ class DebugbarLogger
         // Add database info if available
         try {
             $xoopsDB = \XoopsDatabaseFactory::getDatabaseConnection();
-            if ($xoopsDB instanceof \XoopsMySQLDatabase) {
-                $this->log(LogLevel::INFO, $xoopsDB->getServerVersion(), [
-                    'channel' => 'Extra',
-                    'name'    => sprintf(_MD_DEBUGBAR_DB_VERSION, 'MySQL'),
-                ]);
-            }
+            $this->log(LogLevel::INFO, $xoopsDB->getServerVersion(), [
+                'channel' => 'Extra',
+                'name'    => sprintf(_MD_DEBUGBAR_DB_VERSION, 'MySQL'),
+            ]);
         } catch (\Throwable $e) {
             // ignore
         }
@@ -1157,7 +1152,9 @@ class DebugbarLogger
     private function moduleUrl(): string
     {
         $rootUrl = defined('XOOPS_URL') ? (string) constant('XOOPS_URL') : '';
-        return rtrim($rootUrl, '/') . '/' . 'modules/debugbar';
+        $dirname = basename(dirname(__DIR__));
+
+        return rtrim($rootUrl, '/') . '/modules/' . rawurlencode($dirname);
     }
 
     /** Escape a generated URL or token for a double-quoted HTML attribute. */

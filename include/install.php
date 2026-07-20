@@ -61,7 +61,7 @@ function _debugbar_ensure_explain_secret(): bool
     return $ready;
 }
 
-function _debugbar_create_profiles_table()
+function _debugbar_create_profiles_table(): bool
 {
     $db = $GLOBALS['xoopsDB'];
     $sql = 'CREATE TABLE IF NOT EXISTS ' . $db->prefix('debugbar_profiles') . ' (
@@ -155,7 +155,95 @@ function _debugbar_copy_assets()
         $customCopied = _debugbar_recursive_copy($customDir, $destDir);
     }
 
-    return $vendorCopied && $customCopied;
+    $vendorPatched = _debugbar_patch_vendor_assets($destDir);
+
+    return $vendorCopied && $customCopied && $vendorPatched;
+}
+
+/**
+ * Apply small compatibility and security fixes to vendor files after each copy.
+ *
+ * These files are owned by php-debugbar and therefore are not duplicated in
+ * assets-custom. Keeping the transformations here prevents a module update
+ * from restoring known-bad vendor code over the corrected web assets.
+ */
+function _debugbar_patch_vendor_assets(string $destDir): bool
+{
+    $patches = [
+        'openhandler.js' => [
+            [
+                "        handleFind(data) {\n            const self = this;",
+                "        handleFind(data) {\n            if (!Array.isArray(data)) {\n                return;\n            }\n            const self = this;",
+            ],
+            [
+                "                .catch((err) => {\n                    callback(null, err);\n                });",
+                "                .catch((err) => {\n                    console.error('phpdebugbar openhandler', err);\n                    callback([], err);\n                });",
+            ],
+        ],
+        'highlight.css' => [
+            [
+                "[data-theme='dark'] .phpdebugbar-hljs-meta [data-theme='dark'] .phpdebugbar-hljs-keyword,",
+                "[data-theme='dark'] .phpdebugbar-hljs-meta .phpdebugbar-hljs-keyword,",
+            ],
+            [
+                "[data-theme='dark'] .phpdebugbar-hljs-meta [data-theme='dark'] .phpdebugbar-hljs-string {",
+                "[data-theme='dark'] .phpdebugbar-hljs-meta .phpdebugbar-hljs-string {",
+            ],
+        ],
+        'vardumper.css' => [
+            [
+                ".phpdebugbar[data-theme='dark'] pre.sf-dump, pre.sf-dump .sf-dump-default {",
+                ".phpdebugbar[data-theme='dark'] pre.sf-dump,\n.phpdebugbar[data-theme='dark'] pre.sf-dump .sf-dump-default {",
+            ],
+            [
+                "    line-height: 1.2em;\n    font: 12px Menlo, Monaco, Consolas, monospace;",
+                "    font: 12px/1.2 Menlo, Monaco, Consolas, monospace;",
+            ],
+        ],
+        'vardumper.js' => [
+            [
+                "                if (v._vd) return (v._vd[2] || '') + ' {…}';",
+                "                if (v._vd) return this.esc(v._vd[2] || '') + ' {…}';",
+            ],
+        ],
+        'widgets/mails/widget.js' => [
+            [
+                "                        const popup = window.open('about:blank', 'Mail Preview', 'width=650,height=440,scrollbars=yes');\n                        const documentToWriteTo = popup.document;",
+                "                        const popup = window.open('about:blank', 'Mail Preview', 'width=650,height=440,scrollbars=yes');\n                        if (!popup || !popup.document) {\n                            return;\n                        }\n                        const documentToWriteTo = popup.document;",
+            ],
+            [
+                '                        documentToWriteTo.write(headersHTML + bodyHTML + htmlIframeHTML);',
+                "                        documentToWriteTo.write(\n                            '<meta http-equiv=\"Content-Security-Policy\" content=\"default-src \\'none\\'; img-src data:; style-src \\'unsafe-inline\\';\">'\n                            + headersHTML + bodyHTML + htmlIframeHTML\n                        );",
+            ],
+        ],
+    ];
+
+    foreach ($patches as $relativePath => $replacements) {
+        $path = $destDir . '/' . $relativePath;
+        if (!is_file($path) || !is_readable($path)) {
+            trigger_error('DebugBar asset patch skipped unreadable file: ' . $relativePath, E_USER_WARNING);
+
+            return false;
+        }
+
+        $contents = file_get_contents($path);
+        if (!is_string($contents)) {
+            return false;
+        }
+
+        $patched = $contents;
+        foreach ($replacements as [$search, $replacement]) {
+            $patched = str_replace($search, $replacement, $patched);
+        }
+
+        if ($patched !== $contents && false === file_put_contents($path, $patched)) {
+            trigger_error('DebugBar asset patch could not write file: ' . $relativePath, E_USER_WARNING);
+
+            return false;
+        }
+    }
+
+    return true;
 }
 
 /**

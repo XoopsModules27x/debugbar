@@ -200,7 +200,7 @@ Confirm the package was installed in `xoops_lib`, or run the Global Ray installe
 
 ### Diagnostics finds Ray, but the desktop receives nothing
 
-Confirm all of the following:
+Confirm the following:
 
 - the Ray desktop application is open;
 - XOOPS Debug is on;

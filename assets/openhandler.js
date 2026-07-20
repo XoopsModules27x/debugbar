@@ -145,6 +145,9 @@
         },
 
         handleFind(data) {
+            if (!Array.isArray(data)) {
+                return;
+            }
             const self = this;
             for (const meta of data) {
                 const loadLink = document.createElement('a');
@@ -295,7 +298,8 @@
                 .then(data => data.json())
                 .then(callback)
                 .catch((err) => {
-                    callback(null, err);
+                    console.error('phpdebugbar openhandler', err);
+                    callback([], err);
                 });
         }
 

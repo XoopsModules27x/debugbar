@@ -122,6 +122,7 @@ final class ExplainSecretStore
         }
     }
 
+    /** @phpstan-impure */
     private function withoutWarnings(callable $operation): mixed
     {
         set_error_handler(static fn (): bool => true);

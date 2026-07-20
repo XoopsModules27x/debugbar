@@ -41,6 +41,9 @@
                     link.classList.add(csscls('editor-link'));
                     link.addEventListener('click', () => {
                         const popup = window.open('about:blank', 'Mail Preview', 'width=650,height=440,scrollbars=yes');
+                        if (!popup || !popup.document) {
+                            return;
+                        }
                         const documentToWriteTo = popup.document;
 
                         let headersHTML = '';
@@ -81,7 +84,10 @@
                         }
 
                         documentToWriteTo.open();
-                        documentToWriteTo.write(headersHTML + bodyHTML + htmlIframeHTML);
+                        documentToWriteTo.write(
+                            '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src data:; style-src \'unsafe-inline\';">'
+                            + headersHTML + bodyHTML + htmlIframeHTML
+                        );
                         documentToWriteTo.close();
                     });
                     header.append(link);

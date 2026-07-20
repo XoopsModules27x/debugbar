@@ -72,9 +72,11 @@ final class Profiler
                 ], 'Performance'));
             }
             foreach ($verdict['findings'] as $finding) $logger->log(\Psr\Log\LogLevel::WARNING, $finding, ['channel' => 'messages', 'source' => 'Debugbar performance budget']);
-            (new ProfileRepository())->insert(['request_id' => $this->requestId, 'created' => time(), 'url' => $url, 'url_hash' => md5($url), 'dirname' => $module, 'is_fragment' => $this->isFragment(), 'is_admin_side' => str_contains($url, '/admin'), 'total_ms' => $totalMs, 'boot_ms' => $bootMs, 'query_count' => $stats['count'], 'query_ms' => $stats['total_ms'], 'slowest_ms' => $stats['slowest_ms'], 'slowest_fp' => $stats['slowest_fp'], 'n_plus_one' => $stats['worst_repeat'], 'peak_mem_kb' => (int) round(memory_get_peak_usage(true) / 1024), 'payload_bytes' => (int) round($metrics['payload_kb'] * 1024), 'flags' => $verdict['flags']], (int) ($budgets['profiles_retention_days'] ?? 7), (int) ($budgets['profiles_max_rows'] ?? 10000));
+            (new ProfileRepository())->insert(['request_id' => $this->requestId, 'created' => time(), 'url' => $url, 'url_hash' => hash('xxh128', $url), 'dirname' => $module, 'is_fragment' => $this->isFragment(), 'is_admin_side' => str_contains($url, '/admin'), 'total_ms' => $totalMs, 'boot_ms' => $bootMs, 'query_count' => $stats['count'], 'query_ms' => $stats['total_ms'], 'slowest_ms' => $stats['slowest_ms'], 'slowest_fp' => $stats['slowest_fp'], 'n_plus_one' => $stats['worst_repeat'], 'peak_mem_kb' => (int) round(memory_get_peak_usage(true) / 1024), 'payload_bytes' => (int) round($metrics['payload_kb'] * 1024), 'flags' => $verdict['flags']], (int) ($budgets['profiles_retention_days'] ?? 7), (int) ($budgets['profiles_max_rows'] ?? 10000));
             (new FlightRecorder())->record($this->requestId, ['request_id' => $this->requestId, 'url' => $url, 'module' => $module, 'metrics' => $metrics, 'flags' => BudgetChecker::decodeFlags($verdict['flags']), 'findings' => $verdict['findings'], 'n_plus_one' => $stats['n_plus_one'], 'slow' => $stats['slow']], $verdict['flags'] !== 0, 30);
-            if (is_object($debugbar)) header('Server-Timing: xoops;dur=' . round($totalMs, 1) . ', sql;dur=' . round((float) $stats['total_ms'], 1), false);
+            if (is_object($debugbar) && !headers_sent()) {
+                header('Server-Timing: xoops;dur=' . round($totalMs, 1) . ', sql;dur=' . round((float) $stats['total_ms'], 1), false);
+            }
         } catch (\Throwable $e) { trigger_error('debugbar profiler failed: ' . $e->getMessage(), E_USER_WARNING); }
     }
 

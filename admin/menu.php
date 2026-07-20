@@ -15,7 +15,7 @@ use XoopsModules\Debugbar\{
     Helper
 };
 /** @var Admin $adminObject */
-/** @var Helper $helper */
+/** @var \XoopsModules\Debugbar\Helper $helper */
 
 include_once dirname(__DIR__) . '/preloads/autoloader.php';
 
@@ -26,8 +26,9 @@ $helper = Helper::getInstance();
 
 $pathIcon32 = Admin::menuIconPath('');
 $pathModIcon32 = XOOPS_URL .   '/modules/' . $moduleDirName . '/assets/images/icons/32/';
-if (is_object($helper->getModule()) && false !== $helper->getModule()->getInfo('modicons32')) {
-    $pathModIcon32 = $helper->url($helper->getModule()->getInfo('modicons32'));
+$module = $helper->getModule();
+if ($module instanceof \XoopsModule && false !== $module->getInfo('modicons32')) {
+    $pathModIcon32 = $helper->url((string) $module->getInfo('modicons32'));
 }
 
 $adminmenu = [];
