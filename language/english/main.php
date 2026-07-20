@@ -36,6 +36,8 @@ define('_MD_DEBUGBAR_QUERY_SUMMARY', '%d queries');
 define('_MD_DEBUGBAR_QUERY_DUPLICATES', ' (%d duplicates)');
 define('_MD_DEBUGBAR_BYTES', '%s bytes');
 define('_MD_DEBUGBAR_DB_VERSION', '%s version');
+define('_MD_DEBUGBAR_PROFILE_REQUEST', 'Profile this request');
+define('_MD_DEBUGBAR_PROFILE_REQUEST_LOADING', 'Profiling…');
 
 // Query error formatting
 define('_MD_DEBUGBAR_QUERY_ERROR', ' -- Error number: %s Error message: %s');

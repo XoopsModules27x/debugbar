@@ -1,0 +1,10 @@
+# git blame ignore-revs — XOOPS module DevOps baseline.
+# xoops-overlay:profile=core27
+#
+# Adopting the baseline reformats the whole module once (PHP-CS-Fixer). That bulk
+# commit otherwise dominates `git blame`. After the reformat commit lands, append
+# its FULL 40-char SHA below, then run once:
+#
+#     git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# GitHub honors this file automatically. One commit SHA per line; comments allowed.

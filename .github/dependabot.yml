@@ -1,0 +1,37 @@
+# Dependabot — XOOPS module DevOps baseline.
+# xoops-overlay:profile=core27
+#
+# NOTE: the `dependencies` / `composer` / `github-actions` labels must exist in the
+# repo or Dependabot silently drops them. The org `.github` repo (Layer A) should
+# define them once for the whole org.
+version: 2
+updates:
+  - package-ecosystem: composer
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - composer
+    groups:
+      php-quality:
+        patterns:
+          - "phpstan/*"
+          - "rector/*"
+          - "xoops/rector-xoops"
+          - "friendsofphp/*"
+          - "phpunit/*"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - github-actions
+    groups:
+      github-actions:
+        patterns:
+          - "*"

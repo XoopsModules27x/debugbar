@@ -48,6 +48,33 @@ a.phpdebugbar-tab.phpdebugbar-tab-settings.phpdebugbar-active {
     background-image: linear-gradient(to bottom, rgb(209,209,209) 29%, rgb(173,173,173) 59%);
 }
 
+/* One-shot Xdebug profiler control. It uses only DebugBar variables so it
+   remains independent of the active XOOPS front-end theme. */
+div.phpdebugbar-header-right > button.phpdebugbar-profile-request {
+    background: transparent;
+    border-inline-start: 1px solid var(--debugbar-header-border, #ddd);
+    color: var(--debugbar-header-text, #555);
+    cursor: pointer;
+    font: inherit;
+    height: 22px;
+    line-height: 22px;
+    padding-inline: 12px;
+    white-space: nowrap;
+}
+
+div.phpdebugbar-header-right > button.phpdebugbar-profile-request:hover {
+    background: rgba(0, 0, 0, 0.06);
+}
+
+div.phpdebugbar-header-right > button.phpdebugbar-profile-request:disabled {
+    cursor: wait;
+    opacity: 0.65;
+}
+
+.phpdebugbar-theme-dark div.phpdebugbar-header-right > button.phpdebugbar-profile-request:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
 /* ============================================================
    Settings Panel — matches v3.3 form structure
    <form class="phpdebugbar-settings">

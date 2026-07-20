@@ -1,0 +1,55 @@
+{
+    "name": "xoopsmodules/module-devops",
+    "description": "Standard DevOps baseline for XOOPS modules — GitHub config, CI, Dependabot, and quality tooling (PHPStan, PHP-CS-Fixer, Rector, PHPUnit).",
+    "type": "xoops-module",
+    "license": "GPL-2.0-or-later",
+    "homepage": "https://xoops.org",
+    "support": {
+        "issues": "https://github.com/XoopsModules27x/module-devops/issues",
+        "source": "https://github.com/XoopsModules27x/module-devops"
+    },
+    "require": {
+        "php": ">=8.2"
+    },
+    "autoload": {
+        "psr-4": {
+            "XoopsModules\\Yourmodule\\": "class/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "XoopsModules\\Yourmodule\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "phpstan/extension-installer": true
+        }
+    },
+    "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.64",
+        "phpstan/extension-installer": "^1.4",
+        "phpstan/phpstan": "^2.0",
+        "phpstan/phpstan-deprecation-rules": "^2.0",
+        "phpstan/phpstan-strict-rules": "^2.0",
+        "phpunit/phpunit": "^10.5 || ^11.0",
+        "rector/rector": "^2.0",
+        "xoops/rector-xoops": "^1.0@alpha"
+    },
+    "scripts": {
+        "analyse": "phpstan analyse --configuration=phpstan.neon.dist --memory-limit=512M",
+        "analyse:baseline": "phpstan analyse --configuration=phpstan.neon.dist --generate-baseline=phpstan-baseline.neon --memory-limit=512M",
+        "cs:check": "php-cs-fixer fix --dry-run --diff --config=.php-cs-fixer.dist.php",
+        "cs:fix": "php-cs-fixer fix --config=.php-cs-fixer.dist.php",
+        "rector": "rector process --dry-run",
+        "rector:fix": "rector process",
+        "test": "phpunit --configuration=phpunit.xml.dist",
+        "qa": [
+            "@cs:check",
+            "@analyse",
+            "@rector",
+            "@test"
+        ]
+    }
+}

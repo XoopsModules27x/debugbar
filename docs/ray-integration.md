@@ -1,324 +1,232 @@
-# Ray + DebugBar Integration for XOOPS 2.7.0
+# Ray Integration for XOOPS DebugBar
 
-## What Is This?
+Ray is an optional desktop companion for XOOPS DebugBar. DebugBar remains fully functional when Ray is not installed.
 
-The XOOPS DebugBar module provides two complementary debugging tools:
+The browser toolbar and Ray serve different workflows:
 
-1. **DebugBar** (always available) -- an in-browser toolbar that shows queries, timers, blocks, Smarty variables, errors, and included files directly at the bottom of every page.
+- **DebugBar** keeps request diagnostics with the page in the browser.
+- **Ray** sends selected queries, blocks, messages, exceptions, timers, and explicitly inspected template values to the Ray desktop application.
 
-2. **Ray** (optional) -- sends the same debug data PLUS template-level debug info to the [Ray desktop app](https://myray.app/), giving you a separate, searchable, color-coded debug window.
+Ray output is enabled only for an authenticated administrator when global XOOPS Debug is on and **Enable Ray Integration** is set to **Yes**.
 
-They work **independently**. You can use DebugBar without Ray. If Ray is installed, both run simultaneously -- DebugBar in the browser, Ray on your desktop.
+## Requirements
 
----
+- an installed and active XOOPS DebugBar module;
+- the Ray desktop application;
+- either `spatie/ray` in this XOOPS installation or `spatie/global-ray` on the development machine;
+- global XOOPS Debug enabled;
+- the DebugBar Ray preference enabled.
 
-## Part 1: Installing Ray
+Ray is not installed by the DebugBar module and is not a module dependency.
 
-You have two options. Choose **one**.
+## Install Ray
 
-### Option A: Global Ray (Recommended)
+Download and run the Ray desktop application from [myray.app](https://myray.app/).
 
-Install Ray once for ALL your PHP projects -- no per-project Composer changes needed.
+### Option A: Install Ray in this XOOPS project
 
-```bash
-composer global require spatie/global-ray
-```
+Run Composer from the XOOPS Composer root:
 
-Then add this line to your `php.ini`:
-
-```ini
-auto_prepend_file = C:/Users/YourName/AppData/Roaming/Composer/vendor/spatie/global-ray/src/scripts/global-ray-loader.php
-```
-
-On Linux/Mac the path would be something like:
-
-```ini
-auto_prepend_file = /home/yourname/.composer/vendor/spatie/global-ray/src/scripts/global-ray-loader.php
-```
-
-Restart your web server (Apache/Nginx) after editing `php.ini`.
-
-**Advantages:**
-- Every PHP project on your machine gets Ray automatically
-- No changes to any project's `composer.json`
-- If a project has its own `spatie/ray` in `composer.json`, global-ray detects it and steps aside
-
-### Option B: Per-Project Install
-
-```bash
-cd /path/to/xoops/htdocs/xoops_lib
+```powershell
+cd C:\path\to\xoops\xoops_lib
 composer require --dev spatie/ray
 ```
 
-This only affects the current XOOPS installation.
+This is the most predictable choice for a project that should declare its development tooling. Do not commit Ray as a production requirement unless the deployment intentionally uses it.
 
-### Download the Ray Desktop App
+### Option B: Install Ray globally
 
-Both options require the Ray desktop app:
+Use the current official Global Ray installer:
 
-- Download from [https://myray.app/](https://myray.app/)
-- Available for Windows, macOS, and Linux
-- Free trial available; paid license for continued use
+```powershell
+composer global require spatie/global-ray
+global-ray install
+```
 
----
+Restart the web server after a global installation if the installer changes PHP startup configuration. Use the official [Ray PHP installation guide](https://myray.app/docs/php/vanilla-php/installation) for platform-specific details rather than copying an `auto_prepend_file` path from another machine.
 
-## Part 2: Module Configuration
+## Enable the integration
 
-Go to **System Admin > Modules > DebugBar > Settings** (or Preferences).
+1. Start the Ray desktop application.
+2. Open **XOOPS Administration > DebugBar > Home**.
+3. Turn **XOOPS Debug ON**.
+4. Confirm the **DebugBar toolbar** is on.
+5. Open **DebugBar > Preferences**.
+6. Set **Enable Ray Integration** to **Yes**.
+7. Reload a front-end page while signed in as an administrator.
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| Display DebugBar | Yes | Master switch for the in-browser toolbar |
-| Enable Smarty Debug | Yes | Show Smarty template variables in DebugBar |
-| Enable Included Files Tab | Yes | Show all PHP files loaded during the request |
-| Slow Query Threshold | 0.05 | Queries slower than this (in seconds) are highlighted red |
-| Enable Ray Integration | Yes | Send debug data to Ray desktop app |
+The relevant current defaults are:
 
-**Important:** Setting "Enable Ray Integration" to **No** disables all Ray output -- both the automatic data feed AND the Smarty template plugins. This is the master off-switch.
+| Preference | Default |
+|---|---:|
+| Display DebugBar | Yes |
+| Enable Smarty Debug | No |
+| Enable Included Files Tab | No |
+| Slow Query Threshold | `0.05` seconds |
+| Query Logging | Slow & errors only |
+| Enable Ray Integration | No |
 
----
+Diagnostics reports whether a Ray package is installed and whether the `ray()` function is active in the web request. Remember that command-line PHP and Apache/FPM can load different `php.ini` files.
 
-## Part 3: What Ray Shows Automatically
+## What DebugBar sends automatically
 
-Once Ray is installed and the Ray desktop app is running, you will automatically see:
+When enabled, `RayLogger` receives XOOPS logger activity and forwards:
 
-### Queries (purple)
-Every database query, with:
-- Query number (`Query #1`, `Query #2`, ...)
-- Execution time in milliseconds
-- **Duplicate detection** -- repeated queries show `[DUP x3]` in orange
-- **Slow queries** -- queries exceeding the threshold show in red with `SLOW` label
+### Queries
 
-### Blocks (green/blue)
-- Cached blocks show in **green** with cache duration
-- Non-cached blocks show in **blue**
+- SQL text;
+- execution time when provided by XOOPS;
+- a sequential query number;
+- duplicate counts;
+- slow-query highlighting based on the DebugBar preference;
+- database error number and message for failed queries.
 
-### Errors (red)
-PHP errors, database errors, and exceptions.
+Normal queries are purple, repeated queries are orange, and slow or failed queries are red.
 
-### Deprecation Notices (orange)
-Deprecated function calls and API usage warnings.
+### Blocks
 
-### Extra Debug Info (gray)
-Any custom debug data added via `$xoopsLogger->log()`.
+Block events identify the block and whether it was cached. Cached blocks are green; uncached blocks are blue.
 
-You don't need to write any code for this -- it happens automatically on every page load.
+### Messages and exceptions
 
----
+PSR-3 severity is mapped to a Ray color and label. Deprecations are orange. Exceptions use Ray's exception display when DebugBar is asked to record them.
 
-## Part 4: Smarty Template Plugins
+### Timers
 
-These are the real power of the Ray integration. Drop them into any `.tpl`
-template file to inspect data without disrupting the page output.
+DebugBar lifecycle timers can use Ray's `measure()` facility. This complements the browser timeline but does not replace the stored Analytics profile.
 
-**Note:** XOOPS uses `<{` and `}>` as Smarty delimiters (not `{` and `}`).
-All examples below use the XOOPS convention.
+## Smarty template helpers
 
-### `<{ray}>` -- Send a value to Ray
+Some XOOPS 2.7 installations provide Ray Smarty helpers through the XOOPS Smarty extension package or compatible legacy plugins. These helpers are outside the standalone DebugBar module, so confirm their availability in the target XOOPS core.
+
+All examples use XOOPS Smarty delimiters: `<{ ... }>`.
+
+### Send a value or message
 
 ```smarty
-<{* Send a simple message *}>
-<{ray msg="Reached the user profile section"}>
-
-<{* Send a variable with a label *}>
-<{ray value=$user label="Current User" color="green"}>
-
-<{* Send module config *}>
-<{ray value=$xoops_module_header label="Module Header"}>
+<{ray msg="Reached the profile section" color="green"}>
+<{ray value=$user label="Current user" color="blue"}>
 ```
 
-**Parameters:**
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `value` | No* | Variable to send to Ray |
-| `msg` | No* | String message to send |
-| `label` | No | Label displayed in Ray |
-| `color` | No | `green`, `red`, `blue`, `orange`, `purple`, `gray` |
+`value` or `msg` supplies the data. `label` and `color` are optional.
 
-*At least one of `value` or `msg` is required.
-
-### `<{ray_dump}>` -- Deep-inspect a variable
+### Inspect a value
 
 ```smarty
-<{* Full dump of a complex object *}>
-<{ray_dump value=$xoopsUser label="XoopsUser Object"}>
-
-<{* Inspect module config array *}>
-<{ray_dump value=$xoopsModuleConfig label="Module Config"}>
+<{ray_dump value=$items label="Items"}>
 ```
 
-Shows the complete structure -- nested arrays, object properties, types. Displays in purple in Ray.
+This sends the value using Ray's normal expandable object and array display.
 
-### `<{ray_table}>` -- Show arrays as formatted tables
+### Display an array as a table
 
 ```smarty
-<{* Show all block data as a table *}>
-<{ray_table value=$block label="Block Data"}>
-
-<{* List all users as a table *}>
-<{ray_table value=$users label="Online Users"}>
+<{ray_table value=$items label="Item rows"}>
 ```
 
-Only works with arrays. Ray renders them as a clean, sortable table.
+`ray_table` accepts arrays. Other value types are ignored.
 
-### `<{ray_context}>` -- Dump ALL template variables
+### Inspect the template context
 
 ```smarty
-<{* See everything available at this point in the template *}>
-<{ray_context}>
-
-<{* With a label to identify where in the template you are *}>
-<{ray_context label="Before User Loop"}>
-
-<{* Filter out noisy variables *}>
-<{ray_context label="Clean Context" exclude="xoops_*,smarty"}>
+<{ray_context label="Before item loop" exclude="xoops_*,smarty"}>
 ```
 
-This is incredibly useful when you inherit a theme or module and want to know
-what variables are available. Sends a sorted table to Ray with variable names,
-types, and truncated values.
+The context helper sends a sorted summary of assigned template variables. Objects are represented by class name, arrays by item count, and long strings are truncated. The `exclude` parameter accepts comma-separated exact names and prefix patterns ending in `*`.
 
-**Parameters:**
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `label` | No | Label in Ray (default: "Template Context") |
-| `exclude` | No | Comma-separated names/prefixes to hide. Use `*` for prefix matching: `xoops_*` hides all variables starting with `xoops_` |
-
-### `|ray` -- Inline pass-through modifier
+### Inspect an inline value without changing output
 
 ```smarty
-<{* Debug a value without changing the output *}>
-<h1><{$user.name|ray:"Username"}></h1>
-
-<{* The value is sent to Ray AND still renders in the template *}>
-<span class="<{$blockClass|ray:'Block CSS Class'}>">content</span>
-
-<{* Chain with other modifiers *}>
-<{$content|strip_tags|truncate:200|ray:"Truncated Content"}>
+<h1><{$item.title|ray:"Item title"}></h1>
 ```
 
-The `|ray` modifier is unique -- it sends the value to Ray and then **passes
-it through unchanged**. The template output is not affected. Perfect for quick
-inline debugging.
+The `ray` modifier returns the original value after sending it, so normal template output is unchanged.
 
----
+Each helper checks that `RayLogger` is enabled and that `ray()` exists. When Ray is unavailable or disabled, function tags produce no output and the modifier returns its value unchanged.
 
-## Part 5: Practical Examples
+## Practical workflows
 
-### Example 1: Debugging a module template
+### Find an N+1 query
 
-You're working on `modules/mymodule/templates/item_list.tpl` and items aren't showing:
+1. Start Ray and load the slow page once.
+2. Look for orange query entries with increasing duplicate counts.
+3. Compare them with DebugBar's N+1 analysis and Analytics leaderboard.
+4. Move the repeated lookup outside the loop or replace it with a bulk query.
+5. Reload and confirm both the count and request time decreased.
+
+### Discover template variables
+
+Place this temporarily near the top of the template:
 
 ```smarty
-<{* Add this at the top of the template to see what's available *}>
-<{ray_context label="item_list.tpl top" exclude="smarty"}>
-
-<{* Check if items array exists and what's in it *}>
-<{ray_dump value=$items label="Items Array"}>
-
-<{foreach item=item from=$items}>
-    <{* See each item as it loops *}>
-    <{ray value=$item label="Loop Item" color="blue"}>
-    <div><{$item.title|ray:"Item Title"}></div>
-<{/foreach}>
+<{ray_context label="Template start" exclude="smarty"}>
 ```
 
-### Example 2: Tracking block rendering
+Then inspect only the relevant variable:
 
 ```smarty
-<{* In a theme's theme.tpl, check what block data looks like *}>
-<{foreach item=block from=$xoops_lblocks}>
-    <{ray_table value=$block label="Left Block"}>
-    <div class="block"><{$block.content}></div>
-<{/foreach}>
+<{ray_dump value=$items label="Items supplied by controller"}>
 ```
 
-### Example 3: Finding slow queries
+Remove temporary Ray calls before release. Even when disabled, development probes add noise and can be enabled accidentally later.
 
-No code needed. Just:
-1. Open Ray desktop app
-2. Load a page in XOOPS
-3. Look for **orange** entries (duplicates) and **red** entries (slow queries)
-4. Each shows the full SQL, execution time, and duplicate count
-
-### Example 4: Understanding theme variables
-
-Drop this into any `theme.tpl` to see everything the theme engine provides:
+### Trace a branch without changing HTML
 
 ```smarty
-<{ray_context label="Theme Variables" exclude="smarty"}>
+<{if $is_preview}>
+    <{ray msg="Preview branch" color="orange"}>
+<{/if}>
 ```
 
----
+Ray is useful here because no diagnostic markup is inserted into the browser response.
 
-## Part 6: How It Works Under the Hood
+## Behavior when Ray is absent or disabled
 
-```
-Browser Request
-    |
-    v
-[XoopsLogger] ---- dispatches log() calls ----> [DebugbarLogger] --> Browser Toolbar
-    |                                        |
-    |                                        +-> [RayLogger] -------> Ray Desktop App
-    |
-    v
-[Smarty Templates]
-    |
-    +-- <{ray}> / <{ray_dump}> / <{ray_table}> / <{ray_context}> / |ray
-    |       |
-    |       +-- checks: function_exists('ray') AND RayLogger enabled?
-    |               |
-    |               +-- Yes --> sends to Ray Desktop App
-    |               +-- No  --> silently does nothing
-    |
-    v
-[Browser Output] <---- DebugBar toolbar injected at bottom
-```
+| Situation | Browser DebugBar | Ray forwarding | Smarty Ray helpers |
+|---|---|---|---|
+| Ray package absent | Works | Disabled | Silent no-op/pass-through |
+| Ray preference is No | Works | Disabled | Silent no-op/pass-through |
+| XOOPS Debug is off | Hidden | Disabled | Silent no-op/pass-through |
+| User is not an administrator | Hidden | Disabled | Silent no-op/pass-through |
+| Ray app is running and all checks pass | Works | Enabled | Enabled when the XOOPS Smarty helpers exist |
 
-**Key design principle:** Everything degrades gracefully.
+If the PHP package is present but the desktop application is closed, behavior and connection timing are controlled by the installed Ray package and its configuration. Disable the module preference whenever Ray is not actively being used.
 
-| Scenario | DebugBar | Ray | Smarty plugins |
-|----------|----------|-----|----------------|
-| Ray not installed | Works | Nothing | Silent no-op |
-| Ray installed, app not running | Works | Calls timeout (~2s) | Calls timeout |
-| Ray installed, app running | Works | Full output | Full output |
-| `ray_enable = No` in settings | Works | Disabled | Silent no-op |
-| Non-admin user | Hidden | Disabled | Silent no-op |
+## Troubleshooting
 
-**Warning about Ray desktop app not running:** When Ray is installed (globally
-or per-project), the `ray()` function exists and will attempt to connect to
-the desktop app on `localhost:23517`. If the app is not running, each call
-incurs a ~2 second connection timeout. With many queries and Smarty plugins on
-a page, this can add significant delay. **Always open the Ray app before
-browsing, or set `ray_enable = No` in module settings when you're not
-actively using it.**
+### Diagnostics says Ray is not installed
 
----
+Confirm the package was installed in `xoops_lib`, or run the Global Ray installer. Compare the `php.ini` reported by the web server with the one used by CLI PHP, then restart the web server.
 
-## Part 7: Tips & Best Practices
+### Diagnostics finds Ray, but the desktop receives nothing
 
-1. **Use `<{ray_context}>` first** -- When working on an unfamiliar template, this tells you everything you can work with.
+Confirm all of the following:
 
-2. **Leave `<{ray}>` calls in templates during development** -- They produce zero overhead when Ray is disabled or not installed. Remove them before committing to production.
+- the Ray desktop application is open;
+- XOOPS Debug is on;
+- the current user is an administrator;
+- **Enable Ray Integration** is Yes;
+- the page completed the normal XOOPS authentication lifecycle;
+- local security software is not blocking the Ray connection.
 
-3. **Use colors consistently** -- Pick a color scheme: green for success paths, red for error conditions, blue for data inspection, orange for warnings.
+### PHP events arrive, but Smarty tags do not
 
-4. **Watch for duplicate queries** -- Orange entries in Ray often reveal N+1 query problems. If you see `[DUP x15]`, there's likely a loop that should be optimized.
+The standalone module supplies `RayLogger`, not the XOOPS Smarty plugin registration. Confirm that the installed XOOPS core or `xoops/smartyextensions` version provides `ray`, `ray_dump`, `ray_table`, `ray_context`, and the `ray` modifier. Clear compiled Smarty templates after changing plugin availability.
 
-5. **Use the `|ray` modifier for quick checks** -- It's the fastest way to inspect a value without adding extra lines to your template: `<{$myVar|ray:"check"}>`.
+### A page becomes slow when Ray is enabled
 
-6. **Set a meaningful slow query threshold** -- The default 0.05s (50ms) is reasonable for development. Adjust based on your database and dataset size.
+Turn the Ray preference off and compare the same request. Avoid sending data inside large loops, use a summarized table or a limited sample, and keep the desktop application running while the integration is enabled.
 
-7. **Toggle via module settings, not php.ini** -- Use the `Enable Ray Integration` setting in module preferences. Don't remove global-ray from php.ini just to disable it for XOOPS.
+## Security and release checklist
 
----
+- Enable Ray only on a trusted development or diagnostic environment.
+- Do not send passwords, session identifiers, authorization headers, personal data, or complete request objects.
+- Remove temporary template probes before publishing a theme or module.
+- Turn the Ray preference off after testing.
+- Turn XOOPS Debug off on a public production site.
+- Review the [official Ray PHP usage documentation](https://myray.app/docs/php/vanilla-php/usage) when using Ray APIs directly.
 
-## Quick Reference Card
+## Related guides
 
-| Plugin | Purpose | Example |
-|--------|---------|---------|
-| `<{ray}>` | Send value/message | `<{ray value=$user label="User" color="green"}>` |
-| `<{ray_dump}>` | Deep variable dump | `<{ray_dump value=$config label="Config"}>` |
-| `<{ray_table}>` | Array as table | `<{ray_table value=$items label="Items"}>` |
-| `<{ray_context}>` | All template vars | `<{ray_context exclude="xoops_*"}>` |
-| `\|ray` | Inline pass-through | `<{$name\|ray:"Debug"}>` |
+- [Using XOOPS DebugBar](using-debugbar.md)
+- [Extending XOOPS DebugBar](extending-debugbar.md)

@@ -39,6 +39,24 @@ $adminmenu[] = [
 ];
 
 $adminmenu[] = [
+    'title' => _MI_DEBUGBAR_MENU_ANALYTICS,
+    'link'  => 'admin/analytics.php',
+    'icon'  => $pathIcon32 . '/stats.png',
+];
+
+$adminmenu[] = [
+    'title' => _MI_DEBUGBAR_MENU_LOGS,
+    'link'  => 'admin/logs.php',
+    'icon'  => $pathIcon32 . '/compfile.png',
+];
+
+$adminmenu[] = [
+    'title' => _MI_DEBUGBAR_MENU_DIAGNOSTICS,
+    'link'  => 'admin/diagnostics.php',
+    'icon'  => $pathIcon32 . '/search.png',
+];
+
+$adminmenu[] = [
     'title' => _MI_DEBUGBAR_MENU_ABOUT,
     'link' => 'admin/about.php',
     'icon' => $pathIcon32 . '/about.png',

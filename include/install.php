@@ -19,7 +19,11 @@ defined('XOOPS_ROOT_PATH') || exit('Restricted access');
  */
 function xoops_module_install_debugbar($module)
 {
-    return _debugbar_copy_assets();
+    $assetsReady = _debugbar_copy_assets();
+    $tableReady = _debugbar_create_profiles_table();
+    _debugbar_ensure_explain_secret();
+
+    return $assetsReady && $tableReady;
 }
 
 /**
@@ -31,7 +35,52 @@ function xoops_module_install_debugbar($module)
  */
 function xoops_module_update_debugbar($module, $previousVersion)
 {
-    return _debugbar_copy_assets();
+    $assetsReady = _debugbar_copy_assets();
+    $tableReady = _debugbar_create_profiles_table();
+    _debugbar_ensure_explain_secret();
+
+    return $assetsReady && $tableReady;
+}
+
+/** Create the optional EXPLAIN signing key without making module setup fatal. */
+function _debugbar_ensure_explain_secret(): bool
+{
+    require_once XOOPS_ROOT_PATH . '/modules/debugbar/class/ExplainSecretStore.php';
+
+    try {
+        $ready = (new \XoopsModules\Debugbar\ExplainSecretStore())->ensure();
+    } catch (\Throwable $exception) {
+        trigger_error('DebugBar EXPLAIN signing key setup failed: ' . $exception->getMessage(), E_USER_WARNING);
+
+        return false;
+    }
+    if (!$ready) {
+        trigger_error('DebugBar EXPLAIN signing key is unavailable; EXPLAIN actions remain disabled.', E_USER_WARNING);
+    }
+
+    return $ready;
+}
+
+function _debugbar_create_profiles_table()
+{
+    $db = $GLOBALS['xoopsDB'];
+    $sql = 'CREATE TABLE IF NOT EXISTS ' . $db->prefix('debugbar_profiles') . ' (
+        profile_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        request_id CHAR(16) NOT NULL DEFAULT \'\', created INT UNSIGNED NOT NULL DEFAULT 0,
+        url VARCHAR(500) NOT NULL DEFAULT \'\', url_hash CHAR(32) NOT NULL DEFAULT \'\',
+        dirname VARCHAR(64) NOT NULL DEFAULT \'\', is_fragment TINYINT(1) NOT NULL DEFAULT 0,
+        is_admin_side TINYINT(1) NOT NULL DEFAULT 0, total_ms DECIMAL(10,1) NOT NULL DEFAULT 0,
+        boot_ms DECIMAL(10,1) NOT NULL DEFAULT 0, query_count SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+        query_ms DECIMAL(10,1) NOT NULL DEFAULT 0, slowest_ms DECIMAL(10,1) NOT NULL DEFAULT 0,
+        slowest_fp VARCHAR(255) NOT NULL DEFAULT \'\', n_plus_one SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+        peak_mem_kb INT UNSIGNED NOT NULL DEFAULT 0, payload_bytes INT UNSIGNED NOT NULL DEFAULT 0,
+        flags SMALLINT UNSIGNED NOT NULL DEFAULT 0, PRIMARY KEY (profile_id), KEY idx_created (created),
+        KEY idx_url_created (url_hash, created), KEY idx_dirname_created (dirname, created)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci';
+    try { return false !== $db->exec($sql); } catch (\Throwable $e) {
+        trigger_error('DebugBar profiles table creation failed: ' . $e->getMessage(), E_USER_WARNING);
+        return false;
+    }
 }
 
 /**
@@ -96,8 +145,17 @@ function _debugbar_copy_assets()
         }
     }
 
-    // Recursive copy
-    return _debugbar_recursive_copy($srcDir, $destDir);
+    // Copy the vendor baseline first. Composer may replace these files during
+    // a dependency update, so the module-owned overlay is applied afterward.
+    $vendorCopied = _debugbar_recursive_copy($srcDir, $destDir);
+
+    $customDir = XOOPS_ROOT_PATH . '/modules/debugbar/assets-custom';
+    $customCopied = true;
+    if (is_dir($customDir)) {
+        $customCopied = _debugbar_recursive_copy($customDir, $destDir);
+    }
+
+    return $vendorCopied && $customCopied;
 }
 
 /**

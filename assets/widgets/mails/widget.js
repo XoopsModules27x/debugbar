@@ -24,6 +24,12 @@
                 to.textContent = mail.to;
                 li.append(to);
 
+                if (mail.attachments && mail.attachments.length) {
+                    const attachments = '\nAttachments:\n  ' + mail.attachments.join('\n  ');
+                    mail.headers = (mail.headers || '') + attachments;
+                    delete mail.attachments;
+                }
+
                 if (mail.body || mail.html) {
                     const header = document.createElement('span');
                     header.classList.add(csscls('filename'));
@@ -33,12 +39,8 @@
                     link.setAttribute('title', 'Mail Preview');
                     link.textContent = 'View Mail';
                     link.classList.add(csscls('editor-link'));
-                    link.addEventListener('click', (event) => {
-                        event.stopPropagation();
+                    link.addEventListener('click', () => {
                         const popup = window.open('about:blank', 'Mail Preview', 'width=650,height=440,scrollbars=yes');
-                        if (!popup) {
-                            return;
-                        }
                         const documentToWriteTo = popup.document;
 
                         let headersHTML = '';
@@ -46,6 +48,7 @@
                             const headersPre = document.createElement('pre');
                             headersPre.style.border = '1px solid #ddd';
                             headersPre.style.padding = '5px';
+                            headersPre.style.overflowX = 'scroll';
                             const headersCode = document.createElement('code');
                             headersCode.textContent = mail.headers;
                             headersPre.append(headersCode);
@@ -55,6 +58,7 @@
                         const bodyPre = document.createElement('pre');
                         bodyPre.style.border = '1px solid #ddd';
                         bodyPre.style.padding = '5px';
+                        bodyPre.style.overflowX = 'scroll';
                         bodyPre.textContent = mail.body;
 
                         let bodyHTML = bodyPre.outerHTML;
@@ -77,10 +81,7 @@
                         }
 
                         documentToWriteTo.open();
-                        documentToWriteTo.write(
-                            '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data:;">'
-                            + headersHTML + bodyHTML + htmlIframeHTML
-                        );
+                        documentToWriteTo.write(headersHTML + bodyHTML + htmlIframeHTML);
                         documentToWriteTo.close();
                     });
                     header.append(link);

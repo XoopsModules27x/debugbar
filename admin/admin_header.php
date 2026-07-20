@@ -24,9 +24,12 @@ use XoopsModules\Debugbar\{
 /** @var Admin $adminObject */
 /** @var Helper $helper */
 
-require_once \dirname(__DIR__) . '/preloads/autoloader.php';
-
 require_once \dirname(__DIR__, 3) . '/include/cp_header.php';
+
+// XOOPS_ROOT_PATH is defined by the core bootstrap above. Load the module
+// autoloader afterward so its direct-access guard does not reject valid admin
+// entry points before XOOPS authentication can run.
+require_once \dirname(__DIR__) . '/preloads/autoloader.php';
 
 $moduleDirName = \basename(\dirname(__DIR__));
 $moduleDirNameUpper = mb_strtoupper($moduleDirName);
