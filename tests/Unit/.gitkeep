@@ -1,0 +1,2 @@
+# Keeps tests/Unit/ present so PHPUnit's "Unit" suite never errors on a missing
+# directory. Add *Test.php files here. Safe to delete once real tests exist.

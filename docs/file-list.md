@@ -1,196 +1,99 @@
-# DebugBar Module - Complete File List for XOOPS 2.7.0
+# DebugBar 1.3.0 file inventory
 
-All files required to add the DebugBar + Ray debugging functionality
-to a standard XOOPS 2.7.0 installation.
+This inventory describes the standalone `modules/debugbar` release tree. The three peer-review working notes (`claude.md`, `grok.md`, and `codex.md`) are development artifacts and are not included in the release count.
 
-## Composer Dependency (added by this PR)
+## Release summary
 
-The following entry is added to `xoops_lib/composer.dist.json` under `"require"`:
+| Area | Files | Purpose |
+|---|---:|---|
+| Module root | 5 | Manifest, entry points, README, and changelog |
+| Administration | 8 | Home, Analytics, Logs, Diagnostics, navigation, and wrappers |
+| PHP classes | 17 | Collection, profiling, storage, diagnostics, and optional Ray bridge |
+| Install and preload | 4 | Autoloading, lifecycle registration, schema/assets/key setup |
+| Language and help | 10 | English strings and XOOPS help templates |
+| Documentation shipped | 6 | Tutorials, Ray guide, credits, legacy notes, and this inventory |
+| SQL | 1 | Profile table definition |
+| Module asset overlay | 6 | XOOPS-specific styles and scripts reapplied during update |
+| Generated browser assets | 30 | Web-readable PHP DebugBar resources plus copied overlay files |
+| **Total** | **87** | Excludes the three review notes and repository tests outside the module tree |
 
-```json
-"maximebf/debugbar": "^1.22"
-```
+## Module-owned source tree
 
-This PR adds the `maximebf/debugbar` library and its dependencies (`psr/log`,
-`monolog/monolog`) to the XOOPS vendor directory. Running `composer install` in
-the `xoops_lib/` directory ensures these packages are available. No additional
-Composer packages are needed for the core DebugBar functionality.
-
-Ray is entirely optional and installed separately by the user (see Part 3).
-
----
-
-## Part 1: Module Files (NEW directory)
-
-All files under `htdocs/modules/debugbar/` -- this is a new installable module.
-
-```
-modules/debugbar/
-|
-|-- xoops_version.php              Module definition, configs, admin menu registration
-|-- index.php                      Security guard (returns 404)
-|
+```text
+debugbar/
+|-- README.md
+|-- CHANGELOG.md
+|-- xoops_version.php
+|-- index.php
+|-- explain.php
 |-- admin/
-|   |-- index.php                  Admin home: status page (library check, asset check)
-|   |-- menu.php                   Admin menu entries
-|
-|-- assets/
-|   |-- debugbar.css               DebugBar v1.x core CSS (copied from vendor on install)
-|   |-- debugbar.js                DebugBar v1.x core JS  (copied from vendor on install)
-|   |-- openhandler.css            DebugBar open handler CSS (copied from vendor)
-|   |-- openhandler.js             DebugBar open handler JS  (copied from vendor)
-|   |-- widgets.css                DebugBar widget CSS (copied from vendor)
-|   |-- widgets.js                 DebugBar widget JS  (copied from vendor)
-|   |-- xoops-debugbar-settings.js XOOPS custom: Settings panel (theme, position, tabs)
-|   |-- xoops-debugbar-settings.css XOOPS custom: Settings panel styling
-|   |
-|   |-- images/
-|   |   |-- logoModule.png         Module logo for admin area
-|   |
-|   |-- vendor/
-|       |-- font-awesome/
-|       |   |-- css/
-|       |       |-- font-awesome.min.css   Font Awesome 6.6.0 (icons for tabs)
-|       |
-|       |-- highlightjs/
-|       |   |-- highlight.pack.js          Syntax highlighting for SQL queries
-|       |   |-- styles/
-|       |       |-- github.css             Highlight.js GitHub theme
-|       |
-|       |-- jquery/
-|           |-- dist/
-|               |-- jquery.min.js          jQuery (DebugBar v1.x dependency)
-|
-|       |-- widgets/
-|           |-- mails/
-|           |   |-- widget.css             Mail collector widget CSS
-|           |   |-- widget.js              Mail collector widget JS
-|           |
-|           |-- sqlqueries/
-|           |   |-- widget.css             SQL queries widget CSS
-|           |   |-- widget.js              SQL queries widget JS
-|           |
-|           |-- templates/
-|               |-- widget.css             Templates widget CSS
-|               |-- widget.js              Templates widget JS
-|
+|   |-- about.php
+|   |-- admin_footer.php
+|   |-- admin_header.php
+|   |-- analytics.php
+|   |-- diagnostics.php
+|   |-- index.php
+|   |-- logs.php
+|   `-- menu.php
+|-- assets-custom/
+|   |-- admin-diagnostics.css
+|   |-- admin-logs.css
+|   |-- debugbar.css
+|   |-- debugbar.js
+|   |-- widgets.css
+|   `-- widgets.js
 |-- class/
-|   |-- DebugbarLogger.php         Core: DebugbarLogger class (collects + renders all data)
-|   |-- RayLogger.php              Optional: RayLogger class (forwards data to Ray app)
-|
-|-- docs/
-|   |-- ray-integration.md         Tutorial: Ray + DebugBar usage guide
-|   |-- file-list.md               This file
-|
+|   |-- Analysis/
+|   |   |-- BudgetChecker.php
+|   |   |-- CachegrindCatalog.php
+|   |   |-- DiagnosticSanitizer.php
+|   |   |-- LogCatalog.php
+|   |   |-- MonologLogParser.php
+|   |   |-- QueryAnalyzer.php
+|   |   |-- SqlStatementClassifier.php
+|   |   |-- SystemDiagnostics.php
+|   |   `-- XdebugStatus.php
+|   |-- DebugbarCoreConfig.php
+|   |-- DebugbarLogger.php
+|   |-- ExplainSecretStore.php
+|   |-- FlightRecorder.php
+|   |-- Helper.php
+|   |-- Profiler.php
+|   |-- ProfileRepository.php
+|   `-- RayLogger.php
 |-- include/
-|   |-- install.php                Install/update callback: copies vendor assets
-|
-|-- language/
-|   |-- english/
-|       |-- main.php               Runtime language constants (tab names, labels)
-|       |-- modinfo.php            Module info language constants (config labels)
-|
+|   `-- install.php
 |-- preloads/
-    |-- core.php                   Event hooks: wires everything into XOOPS lifecycle
-    |-- index.php                  Security guard (returns 404)
+|   |-- autoloader.php
+|   |-- core.php
+|   `-- index.html
+|-- language/english/
+|   |-- admin.php
+|   |-- common.php
+|   |-- main.php
+|   |-- modinfo.php
+|   `-- help/
+|       |-- disclaimer.tpl
+|       |-- help.tpl
+|       |-- helpheader.tpl
+|       |-- index.php
+|       |-- license.tpl
+|       `-- support.tpl
+|-- docs/
+|   |-- changelog.txt
+|   |-- credits.txt
+|   |-- extending-debugbar.md
+|   |-- file-list.md
+|   |-- ray-integration.md
+|   `-- using-debugbar.md
+`-- sql/
+    `-- mysql.sql
 ```
 
-### File count: 30 files
+## Generated browser assets
 
----
+`assets/` contains the web-readable PHP DebugBar distribution copied during module install/update. After that copy, the six files from `assets-custom/` are overlaid so XOOPS-specific toolbar, Analytics, Logs, and Diagnostics behavior remains intact. The installer then applies a small, explicit set of compatibility and security corrections to vendor-owned files that are not duplicated in the overlay. Every transformation accepts an already-corrected file but fails the update when neither the expected vendor source nor the corrected form is found, preventing silent vendor drift. Do not hand-edit generated copies in `assets/`; edit `assets-custom/` for module-owned files or update the guarded post-copy patch list in `include/install.php` for a vendor-owned file, then run the XOOPS module update.
 
-## Part 2: Smarty Plugins (added to EXISTING directory)
+## Tests
 
-These 5 files are added to the existing `htdocs/class/smarty3_plugins/` directory.
-They are auto-discovered by Smarty 3 based on filename convention.
-
-```
-class/smarty3_plugins/
-|
-|-- function.ray.php               <{ray value=$var label="..." color="..."}>
-|-- function.ray_dump.php          <{ray_dump value=$obj label="..."}>
-|-- function.ray_table.php         <{ray_table value=$arr label="..."}>
-|-- function.ray_context.php       <{ray_context exclude="xoops_*"}>
-|-- modifier.ray.php               <{$var|ray:"label"}>
-```
-
-### File count: 5 files
-
----
-
-## Part 3: Optional User-Side Requirements
-
-These are NOT part of the XOOPS distribution. They are installed independently
-by developers who want Ray support.
-
-### Ray Desktop App
-- Download from https://myray.app/
-- Available for Windows, macOS, Linux
-
-### Ray PHP Library (one of these options)
-
-**Option A -- Global Ray (recommended for multi-project setups):**
-```bash
-composer global require spatie/global-ray
-```
-Then add to `php.ini`:
-```ini
-auto_prepend_file = /path/to/composer/vendor/spatie/global-ray/src/scripts/global-ray-loader.php
-```
-
-**Option B -- Per-project:**
-```bash
-cd xoops_lib/
-composer require --dev spatie/ray
-```
-
----
-
-## Summary
-
-| Category | Files | New/Existing |
-|----------|-------|--------------|
-| Module: `modules/debugbar/` | 30 | NEW directory |
-| Smarty plugins: `class/smarty3_plugins/` | 5 | Added to existing dir |
-| Composer: `xoops_lib/composer.dist.json` | 1 | Updated (added `maximebf/debugbar`) |
-| **Total new files** | **35** | |
-
-### By function
-
-| Function | Files | Required? |
-|----------|-------|-----------|
-| DebugBar core (browser toolbar) | 28 | Yes |
-| Ray integration (desktop debugger) | 7 | Optional |
-|   - `class/RayLogger.php` | 1 | Optional |
-|   - 5 Smarty plugins | 5 | Optional |
-|   - `docs/ray-integration.md` | 1 | Optional |
-
-### What each piece provides
-
-| Component                        | What it does |
-|----------------------------------|-------------|
-| `DebugbarLogger.php`             | Collects queries, blocks, timers, errors, Smarty vars, included files. Renders the browser toolbar. Detects duplicate/slow queries. |
-| `RayLogger.php`                 | Mirrors all debug data to Ray desktop app with color-coded labels. Zero overhead if Ray is not installed. |
-| `preloads/core.php`              | Wires both loggers into the XOOPS request lifecycle via 8 event hooks. |
-| `xoops-debugbar-settings.js/css` | Settings panel: theme, toolbar position, hide empty tabs, auto-show. |
-| `install.php`                    | Copies vendor DebugBar assets on module install/update. |
-| Smarty plugins                   | Template-level debugging: send variables, dumps, tables, context to Ray from `.tpl` files. |
-
-### Dependencies between files
-
-```
-preloads/core.php
-    |-- loads --> class/DebugbarLogger.php
-    |               |-- uses --> maximebf/debugbar (vendor, via Composer)
-    |               |-- uses --> psr/log (vendor, via Composer)
-    |               |-- renders --> assets/*.js, assets/*.css
-    |               |-- renders --> assets/xoops-debugbar-settings.js/css
-    |
-    |-- loads --> class/RayLogger.php  (optional)
-                    |-- calls --> ray() function (user-installed, optional)
-
-class/smarty3_plugins/function.ray*.php
-class/smarty3_plugins/modifier.ray.php
-    |-- checks --> RayLogger::getInstance()->isEnabled()
-    |-- calls --> ray() function (user-installed, optional)
-```
+The regression suite lives in the XOOPS repository at `tests/unit/modules/debugbar/`, outside the standalone module package. It covers analysis and budgets, request sanitization, the EXPLAIN secret store, logger contracts, profile storage, optional integrations, admin-page structure, log parsing, cachegrind handling, and diagnostics.

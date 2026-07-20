@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    PHPUnit configuration — XOOPS module DevOps baseline.
+    Profile: XoopsCore27 / PHP 8.2+   Overlay version: 1.1.0
+    xoops-overlay:profile=core27
+-->
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="tests/bootstrap.php"
+         cacheDirectory=".build/phpunit"
+         executionOrder="depends,defects"
+         colors="true"
+         failOnRisky="true"
+         failOnWarning="true"
+         beStrictAboutOutputDuringTests="true"
+         displayDetailsOnTestsThatTriggerWarnings="true"
+         displayDetailsOnTestsThatTriggerErrors="true"
+         displayDetailsOnTestsThatTriggerDeprecations="true">
+
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Integration">
+            <directory>tests/Integration</directory>
+        </testsuite>
+    </testsuites>
+
+    <!--
+        Coverage: the bare baseline ships no source code, so <source>/<coverage> are omitted to keep
+        `composer test` warning-free (failOnWarning is on — a non-existent <source> directory would
+        otherwise fail the run). Adopters: add your code dir(s) once they exist, e.g.:
+          <source><include><directory suffix=".php">class</directory></include></source>
+          <coverage><report><html outputDirectory=".build/coverage"/></report></coverage>
+    -->
+
+    <php>
+        <ini name="display_errors" value="1"/>
+        <ini name="error_reporting" value="-1"/>
+        <env name="APP_ENV" value="testing"/>
+        <!-- Path to the booted XOOPS runtime, set by CI; see tests/bootstrap.php -->
+        <env name="XOOPS_ROOT_PATH" value=""/>
+    </php>
+</phpunit>

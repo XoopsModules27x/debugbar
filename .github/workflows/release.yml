@@ -1,0 +1,47 @@
+# Release — XOOPS module DevOps baseline.
+# Profile: XoopsCore27 / PHP 8.2+
+# xoops-overlay:profile=core27
+#
+# On a version tag, build a CLEAN distribution ZIP with `git archive`, which honors
+# the `export-ignore` rules in .gitattributes — so the release contains only what a
+# site administrator should install (no .github/, tests/, phpstan*, rector.php, …) —
+# then attach it to the GitHub Release. This is what makes the export-ignore set pay off.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - '[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - name: Build clean release archive
+        id: archive
+        run: |
+          # Module dirname drives the ZIP name and the in-archive top folder.
+          NAME="$(php tests/helpers/detect-dirname.php 2>/dev/null || basename "$GITHUB_REPOSITORY")"
+          ZIP="${NAME}-${GITHUB_REF_NAME}.zip"
+          git archive --format=zip --prefix="${NAME}/" -o "$ZIP" HEAD
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+
+      - name: Create / update GitHub Release
+        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3.0.1
+        with:
+          files: ${{ steps.archive.outputs.zip }}
+          generate_release_notes: true

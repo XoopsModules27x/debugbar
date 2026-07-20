@@ -19,6 +19,8 @@ declare(strict_types=1);
 use XoopsModules\Debugbar\DebugbarLogger;
 use XoopsModules\Debugbar\RayLogger;
 
+defined('XOOPS_ROOT_PATH') || exit('Restricted access');
+
 /**
  * Class DebugbarCorePreload
  *
@@ -40,19 +42,17 @@ class DebugbarCorePreload extends XoopsPreloadItem
      * Register the PSR-4 autoloader, create the logger singletons,
      * enable them, and start the initial timers.
      *
-     * @param array $args event arguments
+     * @param array<int, mixed> $args event arguments
      * @return void
      */
-    public static function eventCoreIncludeCommonStart($args)
+    public static function eventCoreIncludeCommonStart(array $args): void
     {
         // Preload handlers run on every request and must never throw (R-014):
         // a fatal here would blank the whole site — front end and admin — before
         // an admin could disable the module.
         try {
             // Ensure XoopsLogger is loaded — this event fires before common.php loads it
-            if (!class_exists('XoopsLogger', false)) {
-                XoopsLoad::load('xoopslogger');
-            }
+            XoopsLoad::load('xoopslogger');
 
             // Register PSR-4 autoloader for XoopsModules\Debugbar namespace
             require_once __DIR__ . '/autoloader.php';
@@ -79,10 +79,10 @@ class DebugbarCorePreload extends XoopsPreloadItem
      * Check if the current user has permission to see the debugbar.
      * Only admin users see it by default. Also check module config.
      *
-     * @param array $args event arguments
+     * @param array<int, mixed> $args event arguments
      * @return void
      */
-    public static function eventCoreIncludeCommonAuthSuccess($args)
+    public static function eventCoreIncludeCommonAuthSuccess(array $args): void
     {
         $logger = DebugbarLogger::getInstance();
 
@@ -122,6 +122,16 @@ class DebugbarCorePreload extends XoopsPreloadItem
             $logger->setQueryLogMode((int) $moduleConfig['query_log_mode']);
         }
 
+        if (is_array($moduleConfig) && isset($moduleConfig['slow_request_threshold'])) {
+            $logger->setSlowRequestThreshold((float) $moduleConfig['slow_request_threshold']);
+        }
+        if (is_array($moduleConfig) && isset($moduleConfig['memory_threshold'])) {
+            $logger->setMemoryThreshold((int) $moduleConfig['memory_threshold'] * 1024 * 1024);
+        }
+        if (is_array($moduleConfig) && isset($moduleConfig['profile_button_enable'])) {
+            $logger->setProfileButtonEnabled(!empty($moduleConfig['profile_button_enable']));
+        }
+
         // Enable Ray only now (never at common.start): the request has reached
         // an authenticated admin with debug enabled. Honour the ray_enable
         // config; RayLogger::enable() itself no-ops unless spatie/ray exists.
@@ -132,10 +142,14 @@ class DebugbarCorePreload extends XoopsPreloadItem
             self::disableRay();
         }
 
+        // Create the on-demand EXPLAIN token while the authenticated session
+        // is still active; footer rendering may happen after session close.
+        $logger->prepareExplainToken();
+
         // If debugbar is active, suppress the legacy XoopsLogger HTML output
         // so we don't get double debug output
         if ($logger->isEnabled()) {
-            $xoopsLogger = \XoopsLogger::getInstance();
+            $xoopsLogger = self::xoopsLogger();
             $xoopsLogger->renderingEnabled = false;
             // Keep activated=true so data still flows to our composite loggers
         }
@@ -148,12 +162,13 @@ class DebugbarCorePreload extends XoopsPreloadItem
      * (anonymous visitors), disable DebugBar and Ray to prevent
      * exposing debug info to non-admin users.
      *
-     * @param array $args event arguments
+     * @param array<int, mixed> $args event arguments
      * @return void
      */
-    public static function eventCoreIncludeCommonEnd($args)
+    public static function eventCoreIncludeCommonEnd(array $args): void
     {
         $logger = DebugbarLogger::getInstance();
+        self::registerMonolog();
 
         // If no admin user is authenticated, disable debug output.
         // eventCoreIncludeCommonAuthSuccess handles the admin case;
@@ -174,12 +189,25 @@ class DebugbarCorePreload extends XoopsPreloadItem
     }
 
     /**
+     * Add redacted DebugBar context to xWhoops without replacing its handler.
+     * @param array<int, mixed> $args
+     */
+    public static function eventXwhoopsHandlerConfigure(array $args): void
+    {
+        $handler = $args[0] ?? null;
+        if (!is_object($handler) || !method_exists($handler, 'addDataTableCallback')) {
+            return;
+        }
+        $handler->addDataTableCallback('DebugBar', static fn (): array => DebugbarLogger::getInstance()->whoopsSnapshot());
+    }
+
+    /**
      * core.header.start — header.php begins.
      *
-     * @param array $args event arguments
+     * @param array<int, mixed> $args event arguments
      * @return void
      */
-    public static function eventCoreHeaderStart($args)
+    public static function eventCoreHeaderStart(array $args): void
     {
         $logger = DebugbarLogger::getInstance();
         $logger->stopTime('Module init');
@@ -192,10 +220,10 @@ class DebugbarCorePreload extends XoopsPreloadItem
      * Assets are now rendered inline by renderDebugBar() at core.footer.end
      * for full theme-independence. This event is kept for future use.
      *
-     * @param array $args event arguments
+     * @param array<int, mixed> $args event arguments
      * @return void
      */
-    public static function eventCoreHeaderAddmeta($args)
+    public static function eventCoreHeaderAddmeta(array $args): void
     {
         // Assets rendered inline in renderDebugBar() — no theme dependency
     }
@@ -203,10 +231,10 @@ class DebugbarCorePreload extends XoopsPreloadItem
     /**
      * core.header.end — header complete.
      *
-     * @param array $args event arguments
+     * @param array<int, mixed> $args event arguments
      * @return void
      */
-    public static function eventCoreHeaderEnd($args)
+    public static function eventCoreHeaderEnd(array $args): void
     {
         $logger = DebugbarLogger::getInstance();
         $logger->stopTime('XOOPS output init');
@@ -216,10 +244,10 @@ class DebugbarCorePreload extends XoopsPreloadItem
     /**
      * core.footer.start — footer begins.
      *
-     * @param array $args event arguments
+     * @param array<int, mixed> $args event arguments
      * @return void
      */
-    public static function eventCoreFooterStart($args)
+    public static function eventCoreFooterStart(array $args): void
     {
         $logger = DebugbarLogger::getInstance();
         $logger->stopTime('Module display');
@@ -245,10 +273,10 @@ class DebugbarCorePreload extends XoopsPreloadItem
      * core.footer.end — final event, render the debugbar.
      * This replaces XOOPS 2.6's core.session.shutdown.
      *
-     * @param array $args event arguments
+     * @param array<int, mixed> $args event arguments
      * @return void
      */
-    public static function eventCoreFooterEnd($args)
+    public static function eventCoreFooterEnd(array $args): void
     {
         $logger = DebugbarLogger::getInstance();
         $logger->stopTime('XOOPS');
@@ -265,12 +293,51 @@ class DebugbarCorePreload extends XoopsPreloadItem
         RayLogger::getInstance()->disable();
     }
 
+    /** Register the core file adapter once, after module configuration is available. */
+    private static function registerMonolog(): void
+    {
+        static $registered = false;
+        if ($registered || !class_exists('Monolog\\Logger')) {
+            return;
+        }
+        $config = self::getModuleConfig();
+        if (is_array($config) && isset($config['monolog_enable']) && empty($config['monolog_enable'])) {
+            return;
+        }
+        $levels = ['debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency'];
+        $level = is_array($config) ? strtolower((string) ($config['monolog_level'] ?? 'warning')) : 'warning';
+        if (!in_array($level, $levels, true)) {
+            $level = 'warning';
+        }
+        $adapterFile = XOOPS_ROOT_PATH . '/class/logger/monologlogger.php';
+        if (!is_file($adapterFile)) {
+            return;
+        }
+        require_once $adapterFile;
+        $adapter = new \XoopsMonologLogger('xoops', [], [], $level);
+        if ($adapter->isActive()) {
+            self::xoopsLogger()->addLogger($adapter);
+            $registered = true;
+        }
+    }
+
+    /** Resolve the legacy singleton to its concrete type for adapter calls. */
+    private static function xoopsLogger(): \XoopsLogger
+    {
+        $logger = \XoopsLogger::getInstance();
+        if (!$logger instanceof \XoopsLogger) {
+            throw new \RuntimeException('XOOPS logger is unavailable');
+        }
+
+        return $logger;
+    }
+
     /**
      * Helper: get the debugbar module configuration.
      *
-     * @return array|false
+     * @return array<string, mixed>|false
      */
-    private static function getModuleConfig()
+    private static function getModuleConfig(): array|false
     {
         static $config = null;
         if (null !== $config) {
@@ -282,12 +349,10 @@ class DebugbarCorePreload extends XoopsPreloadItem
             $configHandler = xoops_getHandler('config');
             /** @var \XoopsModuleHandler $moduleHandler */
             $moduleHandler = xoops_getHandler('module');
-            if ($configHandler && $moduleHandler) {
-                $debugbarModule = $moduleHandler->getByDirname('debugbar');
-                if (is_object($debugbarModule)) {
-                    $config = $configHandler->getConfigsByCat(0, $debugbarModule->getVar('mid'));
-                    return $config;
-                }
+            $debugbarModule = $moduleHandler->getByDirname('debugbar');
+            if ($debugbarModule instanceof \XoopsModule) {
+                $config = $configHandler->getConfigsByCat(0, $debugbarModule->getVar('mid'));
+                return $config;
             }
         } catch (\Throwable $e) {
             // Module may not be fully installed yet

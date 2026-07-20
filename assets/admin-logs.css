@@ -1,0 +1,86 @@
+.debugbar-log-panel {
+    background: var(--bs-body-bg, #fff);
+    border: 1px solid var(--bs-border-color, #d8dde3);
+    border-radius: .35rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .08);
+    color: var(--bs-body-color, #252b33);
+    overflow: hidden;
+}
+
+.debugbar-log-panel-header {
+    align-items: center;
+    border-block-end: 1px solid var(--bs-border-color, #d8dde3);
+    display: flex;
+    flex-wrap: wrap;
+    gap: .6rem;
+    justify-content: space-between;
+    padding: .85rem 1rem;
+}
+
+.debugbar-log-panel-title {
+    align-items: center;
+    display: flex;
+    font-size: 1.05rem;
+    font-weight: 700;
+    gap: .45rem;
+    margin: 0;
+}
+
+.debugbar-log-count,
+.debugbar-log-level {
+    border-radius: .25rem;
+    display: inline-block;
+    font-size: .72rem;
+    font-weight: 700;
+    line-height: 1.4;
+    padding: .12rem .45rem;
+    text-transform: uppercase;
+}
+
+.debugbar-log-count { background: #59636e; color: #fff; text-transform: none; }
+.debugbar-log-panel-meta { color: #687381; font-size: .82rem; }
+.debugbar-log-table-wrap { overflow-x: auto; }
+.debugbar-log-table { border-collapse: collapse; min-width: 920px; width: 100%; }
+.debugbar-log-table th,
+.debugbar-log-table td { border-block-end: 1px solid var(--bs-border-color, #e1e5ea); padding: .65rem .75rem; text-align: start; vertical-align: middle; }
+.debugbar-log-table th { background: rgba(90, 105, 120, .06); color: #505b67; font-size: .78rem; font-weight: 700; white-space: nowrap; }
+.debugbar-log-table tbody tr:hover { background: rgba(43, 108, 176, .055); }
+.debugbar-log-table tbody tr:last-child td { border-block-end: 0; }
+
+.debugbar-log-time { color: #596574; font-size: .82rem; white-space: nowrap; }
+.debugbar-log-time strong { color: var(--bs-body-color, #252b33); display: inline; font-size: .88rem; font-weight: 600; }
+.debugbar-log-level { background: #edf2f7; color: #364152; }
+.debugbar-log-level--warning { background: #fff0bf; color: #765000; }
+.debugbar-log-level--error,
+.debugbar-log-level--critical,
+.debugbar-log-level--alert,
+.debugbar-log-level--emergency { background: #fbd5d5; color: #9b1c1c; }
+.debugbar-log-level--info,
+.debugbar-log-level--notice { background: #dceeff; color: #1e5794; }
+.debugbar-log-description { max-width: 44rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.debugbar-log-channel { color: #55616e; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .82rem; }
+.debugbar-log-location { color: #596574; font: .78rem/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; max-width: 22rem; white-space: nowrap; }
+.debugbar-log-error { color: #a4262c; display: inline; font-size: .78rem; }
+.debugbar-log-details { position: relative; }
+.debugbar-log-details summary { color: #27689d; cursor: pointer; font-size: .82rem; font-weight: 700; list-style: none; white-space: nowrap; }
+.debugbar-log-details summary::-webkit-details-marker { display: none; }
+.debugbar-log-context,
+.debugbar-log-raw {
+    background: #f7f8fa;
+    border: 1px solid #dfe4ea;
+    border-radius: .25rem;
+    direction: ltr;
+    font: .8rem/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+    max-height: 28rem;
+    overflow: auto;
+    padding: .8rem;
+    text-align: start;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.debugbar-log-context { margin-block: .55rem 0; min-width: 36rem; }
+.debugbar-log-raw { margin: .75rem; }
+
+@media (max-width: 760px) {
+    .debugbar-log-panel-header { align-items: flex-start; flex-direction: column; }
+}

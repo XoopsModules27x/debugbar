@@ -16,8 +16,8 @@ defined('XOOPS_ROOT_PATH') || exit('Restricted access');
 $modversion = [];
 
 // --- Module Info ---
-$modversion['version']      = '1.0.0';
-$modversion['release_date'] = '2026/05/14';
+$modversion['version']      = '1.3.0';
+$modversion['release_date'] = '2026/07/20';
 $modversion['name']         = _MI_DEBUGBAR_NAME;
 $modversion['description']  = _MI_DEBUGBAR_DSC;
 $modversion['author']       = 'XOOPS Project';
@@ -27,6 +27,8 @@ $modversion['license_url']  = 'https://www.gnu.org/licenses/gpl-2.0.html';
 $modversion['official']     = 1;
 $modversion['image']        = 'assets/images/logoModule.png'; // optional, module works without it
 $modversion['dirname']      = 'debugbar';
+$modversion['tables']       = ['debugbar_profiles'];
+$modversion['sqlfile']      = ['mysql' => 'sql/mysql.sql'];
 
 // --- Min Requirements ---
 $modversion['min_php']   = '8.2.0';
@@ -68,7 +70,7 @@ $modversion['config'][] = [
     'description' => '',
     'formtype'    => 'yesno',
     'valuetype'   => 'int',
-    'default'     => 1,
+    'default'     => 0,
 ];
 
 $modversion['config'][] = [
@@ -106,4 +108,78 @@ $modversion['config'][] = [
     'formtype'    => 'yesno',
     'valuetype'   => 'int',
     'default'     => 0,
+];
+
+$modversion['config'][] = [
+    'name'        => 'slow_request_threshold',
+    'title'       => '_MI_DEBUGBAR_SLOWREQUEST',
+    'description' => '_MI_DEBUGBAR_SLOWREQUEST_DSC',
+    'formtype'    => 'textbox',
+    'valuetype'   => 'text',
+    'default'     => '1.0',
+];
+
+$modversion['config'][] = [
+    'name'        => 'memory_threshold',
+    'title'       => '_MI_DEBUGBAR_MEMORY_THRESHOLD',
+    'description' => '_MI_DEBUGBAR_MEMORY_THRESHOLD_DSC',
+    'formtype'    => 'textbox',
+    'valuetype'   => 'int',
+    'default'     => 0,
+];
+
+foreach ([
+    ['budget_queries', '_MI_DEBUGBAR_BUDGET_QUERIES', 30],
+    ['budget_query_ms', '_MI_DEBUGBAR_BUDGET_QUERY_MS', 120],
+    ['budget_boot_ms', '_MI_DEBUGBAR_BUDGET_BOOT_MS', 0],
+    ['budget_total_ms', '_MI_DEBUGBAR_BUDGET_TOTAL_MS', 300],
+    ['budget_memory_mb', '_MI_DEBUGBAR_BUDGET_MEMORY_MB', 32],
+    ['budget_payload_kb', '_MI_DEBUGBAR_BUDGET_PAYLOAD_KB', 250],
+    ['nplus1_threshold', '_MI_DEBUGBAR_NPLUS1_THRESHOLD', 5],
+    ['profiles_retention_days', '_MI_DEBUGBAR_PROFILES_RETENTION', 7],
+    ['profiles_max_rows', '_MI_DEBUGBAR_PROFILES_MAX_ROWS', 10000],
+] as [$name, $title, $default]) {
+    $modversion['config'][] = [
+        'name' => $name, 'title' => $title,
+        'description' => $name === 'nplus1_threshold' ? '_MI_DEBUGBAR_NPLUS1_THRESHOLD_DSC' : '_MI_DEBUGBAR_BUDGET_DSC',
+        'formtype' => 'textbox', 'valuetype' => 'int', 'default' => $default,
+    ];
+}
+
+$modversion['config'][] = [
+    'name' => 'profiles_enable', 'title' => '_MI_DEBUGBAR_PROFILES_ENABLE',
+    'description' => '_MI_DEBUGBAR_PROFILES_ENABLE_DSC', 'formtype' => 'yesno',
+    'valuetype' => 'int', 'default' => 1,
+];
+
+$modversion['config'][] = [
+    'name'        => 'profile_button_enable',
+    'title'       => '_MI_DEBUGBAR_PROFILE_BUTTON_ENABLE',
+    'description' => '_MI_DEBUGBAR_PROFILE_BUTTON_ENABLE_DSC',
+    'formtype'    => 'yesno',
+    'valuetype'   => 'int',
+    'default'     => 1,
+];
+
+$modversion['config'][] = [
+    'name'        => 'monolog_enable',
+    'title'       => '_MI_DEBUGBAR_MONOLOG_ENABLE',
+    'description' => '_MI_DEBUGBAR_MONOLOG_ENABLE_DSC',
+    'formtype'    => 'yesno',
+    'valuetype'   => 'int',
+    'default'     => 1,
+];
+
+$modversion['config'][] = [
+    'name'        => 'monolog_level',
+    'title'       => '_MI_DEBUGBAR_MONOLOG_LEVEL',
+    'description' => '_MI_DEBUGBAR_MONOLOG_LEVEL_DSC',
+    'formtype'    => 'select',
+    'valuetype'   => 'text',
+    'default'     => 'warning',
+    'options'     => [
+        _MI_DEBUGBAR_LEVEL_DEBUG => 'debug', _MI_DEBUGBAR_LEVEL_INFO => 'info',
+        _MI_DEBUGBAR_LEVEL_NOTICE => 'notice', _MI_DEBUGBAR_LEVEL_WARNING => 'warning',
+        _MI_DEBUGBAR_LEVEL_ERROR => 'error', _MI_DEBUGBAR_LEVEL_CRITICAL => 'critical',
+    ],
 ];

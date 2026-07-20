@@ -25,14 +25,15 @@ defined('XOOPS_ROOT_PATH') || exit('Restricted access');
 /**
  * Class Helper
  */
-class Helper extends \Xmf\Module\Helper
+final class Helper extends \Xmf\Module\Helper
 {
+    /** @var bool */
     public $debug;
 
     /**
      * @param bool $debug
      */
-    public function __construct($debug = false)
+    public function __construct(bool $debug = false)
     {
         $this->debug   = $debug;
         $moduleDirName = \basename(\dirname(__DIR__));
@@ -48,7 +49,7 @@ class Helper extends \Xmf\Module\Helper
     {
         static $instance;
         if (null === $instance) {
-            $instance = new static($debug);
+            $instance = new self($debug);
         }
 
         return $instance;
@@ -67,7 +68,7 @@ class Helper extends \Xmf\Module\Helper
      *
      * @param string $name name of handler to load
      *
-     * @return bool|\XoopsObjectHandler|\XoopsPersistableObjectHandler
+     * @return object
      */
     public function getHandler($name)
     {

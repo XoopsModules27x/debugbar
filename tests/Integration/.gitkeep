@@ -1,0 +1,3 @@
+# Keeps tests/Integration/ present so PHPUnit's "Integration" suite never errors on
+# a missing directory. Integration tests should `use \RequiresXoops;` and call
+# $this->requiresXoops() so they self-skip when no XOOPS runtime is available.

@@ -35,34 +35,34 @@ class RayLogger
     /**
      * @var bool Whether Ray is available and enabled
      */
-    private $activated = false;
+    private bool $activated = false;
 
     /**
      * @var int Query counter
      */
-    private $queryCount = 0;
+    private int $queryCount = 0;
 
     /**
-     * @var array Query tracking for duplicate detection: sql => count
+     * @var array<string, int> Query tracking for duplicate detection: sql => count
      */
-    private $queryMap = [];
+    private array $queryMap = [];
 
     /**
      * @var float Slow query threshold in seconds
      */
-    private $slowQueryThreshold = 0.05;
+    private float $slowQueryThreshold = 0.05;
 
     /**
-     * @var array Map of timer name => key used for Ray measure (to keep start/stop consistent)
+     * @var array<string, string> Map of timer name => key used for Ray measure
      */
-    private $timerKeys = [];
+    private array $timerKeys = [];
 
     /**
      * Constructor — registers this logger with XoopsLogger composite.
      */
     public function __construct()
     {
-        $xoopsLogger = \XoopsLogger::getInstance();
+        $xoopsLogger = self::xoopsLogger();
         $xoopsLogger->addLogger($this);
     }
 
@@ -71,10 +71,10 @@ class RayLogger
      *
      * @return RayLogger
      */
-    public static function getInstance()
+    public static function getInstance(): self
     {
-        static $instance;
-        if (!isset($instance)) {
+        static $instance = null;
+        if (!$instance instanceof self) {
             $instance = new self();
         }
         return $instance;
@@ -85,7 +85,7 @@ class RayLogger
      *
      * @return void
      */
-    public function enable()
+    public function enable(): void
     {
         if (function_exists('ray')) {
             $this->activated = true;
@@ -97,7 +97,7 @@ class RayLogger
      *
      * @return void
      */
-    public function disable()
+    public function disable(): void
     {
         $this->activated = false;
     }
@@ -107,7 +107,7 @@ class RayLogger
      *
      * @return bool
      */
-    public function isEnabled()
+    public function isEnabled(): bool
     {
         return $this->activated;
     }
@@ -118,9 +118,9 @@ class RayLogger
      * @param float $seconds
      * @return void
      */
-    public function setSlowQueryThreshold($seconds)
+    public function setSlowQueryThreshold(float $seconds): void
     {
-        $this->slowQueryThreshold = (float) $seconds;
+        $this->slowQueryThreshold = $seconds;
     }
 
     /**
@@ -130,7 +130,7 @@ class RayLogger
      * @param string|null $label optional label
      * @return void
      */
-    public function startTime($name = 'XOOPS', $label = null)
+    public function startTime(string $name = 'XOOPS', ?string $label = null): void
     {
         if (!$this->activated) {
             return;
@@ -150,7 +150,7 @@ class RayLogger
      * @param string $name name of the timer
      * @return void
      */
-    public function stopTime($name = 'XOOPS')
+    public function stopTime(string $name = 'XOOPS'): void
     {
         if (!$this->activated) {
             return;
@@ -170,7 +170,7 @@ class RayLogger
      * @param \Exception|\Throwable $e
      * @return void
      */
-    public function addException($e)
+    public function addException(\Throwable $e): void
     {
         if (!$this->activated) {
             return;
@@ -188,7 +188,7 @@ class RayLogger
      *
      * @return void
      */
-    public function quiet()
+    public function quiet(): void
     {
         // no-op: Ray always sends to the desktop app
     }
@@ -198,18 +198,19 @@ class RayLogger
      *
      * @param mixed  $level   PSR-3 log level
      * @param string $message log message
-     * @param array  $context context array, may include 'channel' key
+     * @param array<string, mixed> $context context array, may include 'channel' key
      * @return void
      */
-    public function log($level, $message, array $context = [])
+    public function log(mixed $level, string $message, array $context = []): void
     {
         if (!$this->activated) {
             return;
         }
 
-        $channel = isset($context['channel']) ? strtolower($context['channel']) : 'messages';
-
         try {
+            $channel = isset($context['channel']) && is_scalar($context['channel'])
+                ? strtolower((string) $context['channel'])
+                : 'messages';
             switch ($channel) {
                 case 'queries':
                     $this->logQuery($level, $message, $context);
@@ -240,10 +241,10 @@ class RayLogger
      *
      * @param string $level
      * @param string $message SQL query
-     * @param array  $context
+     * @param array<string, mixed> $context
      * @return void
      */
-    private function logQuery($level, $message, array $context)
+    private function logQuery(mixed $level, string $message, array $context): void
     {
         $queryTime = !empty($context['query_time']) ? (float) $context['query_time'] : 0.0;
 
@@ -294,10 +295,10 @@ class RayLogger
      * Log a block rendering event.
      *
      * @param string $message block name
-     * @param array  $context
+     * @param array<string, mixed> $context
      * @return void
      */
-    private function logBlock($message, array $context)
+    private function logBlock(string $message, array $context): void
     {
         $cached = !empty($context['cached']);
         $cacheTime = (int) ($context['cachetime'] ?? 0);
@@ -316,7 +317,7 @@ class RayLogger
      * @param string $level
      * @return string
      */
-    private function levelToColor($level)
+    private function levelToColor(mixed $level): string
     {
         switch ($level) {
             case LogLevel::EMERGENCY:
@@ -342,7 +343,7 @@ class RayLogger
      * @param string $level
      * @return string
      */
-    private function levelToLabel($level)
+    private function levelToLabel(mixed $level): string
     {
         switch ($level) {
             case LogLevel::EMERGENCY: return 'EMERGENCY';
@@ -355,5 +356,16 @@ class RayLogger
             case LogLevel::DEBUG:
             default:                  return 'Debug';
         }
+    }
+
+    /** Resolve the legacy singleton to its concrete type for adapter calls. */
+    private static function xoopsLogger(): \XoopsLogger
+    {
+        $logger = \XoopsLogger::getInstance();
+        if (!$logger instanceof \XoopsLogger) {
+            throw new \RuntimeException('XOOPS logger is unavailable');
+        }
+
+        return $logger;
     }
 }

@@ -1,0 +1,57 @@
+# PHPStan configuration — XOOPS module DevOps baseline.
+# Generated from the baseline template for profile: XoopsCore27 / PHP 8.2+
+# Overlay version: 1.1.0
+# xoops-overlay:profile=core27
+#
+# Copy to phpstan.neon to override locally; the .dist file stays in sync with the baseline.
+#
+# phpstan-strict-rules and phpstan-deprecation-rules are activated automatically by
+# phpstan/extension-installer (added to require-dev by the baseline installer). No manual
+# `includes` of their rules.neon is needed — and adding one would double-register them.
+includes:
+    - phpstan-baseline.neon
+
+parameters:
+    level: 8
+
+    phpVersion: 80200
+
+    # Scan the whole module and exclude what isn't analyzable, rather than listing
+    # source dirs that legacy modules may not have. `(?)` marks a path optional so
+    # PHPStan never errors when it's absent.
+    paths:
+        - .
+
+    excludePaths:
+        - vendor (?)
+        - language (?)
+        - templates (?)
+        - templates_c (?)
+        - assets (?)
+        - docs (?)
+        - .build (?)
+        - node_modules (?)
+        - tests/bootstrap.php (?)
+        - rector.php (?)
+        - .php-cs-fixer.dist.php (?)
+
+    # XOOPS core classes (XoopsObject, XoopsPreloadItem, handlers, Criteria, …) are
+    # not composer-autoloadable during analysis. Use `scanFiles` (NOT `stubFiles`) so
+    # the classes are registered as existing and `extends`/`implements` resolve —
+    # `stubFiles` only refines signatures of classes PHPStan can already discover, so a
+    # module extending a core class would hit a non-ignorable `class.notFound`.
+    scanFiles:
+        - stubs/xoops.stub
+
+    bootstrapFiles:
+        - phpstan-bootstrap.php
+
+    treatPhpDocTypesAsCertain: false
+    reportUnmatchedIgnoredErrors: false
+
+    ignoreErrors:
+        # XOOPS injects these as superglobals at runtime; analysis can't see the assignment.
+        - '#Variable \$xoops(DB|User|Module|ModuleConfig|Tpl|Security|Config|Logger|Option) might not be defined#'
+
+    parallel:
+        maximumNumberOfProcesses: 4

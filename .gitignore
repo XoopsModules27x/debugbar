@@ -1,0 +1,89 @@
+# .gitignore — XOOPS module DevOps baseline
+# xoops-overlay:profile=core27
+#
+# Keeps dependencies, build output, tool caches, and local/IDE/OS files out of git.
+# Release ZIP exclusions are handled by .gitattributes `export-ignore`, not here.
+#
+# Commit the *.dist configs (phpunit.xml.dist, phpstan.neon.dist, phpstan-baseline.neon).
+# Ignore only local working-copy overrides below — never use *.neon (too broad).
+# Leading "/" anchors a pattern to the module root.
+
+# --- IDE / editor ---
+/.idea/
+/.vscode/
+*.code-workspace
+*.iml
+*.swp
+*.swo
+*~
+\#*
+\#*\#
+.#*
+*.bak
+*.orig
+*.rej
+
+# --- OS files ---
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+Icon?
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+desktop.ini
+
+# --- Dependencies ---
+/vendor/
+/node_modules/
+# Module ships as XOOPS source, not `composer require` — lock stays local.
+# Commit composer.lock instead if you want pinned dev-tool versions in CI.
+composer.lock
+package-lock.json
+
+# --- Build, reports & coverage ---
+/.build/
+/build/
+/coverage/
+/docs/api/
+/htmlcov/
+/reports/
+/tests/_output/
+/tests/coverage/
+*.lcov
+
+# --- Tool caches (specific names — avoid *.cache / *.neon wildcards) ---
+/.php-cs-fixer.cache
+/.php_cs.cache
+/.php_cs
+/.phpunit.result.cache
+/.phpunit.cache/
+/.phpstan.cache/
+/.psalm.cache/
+/.rector-cache/
+/.rector.cache
+/.scannerwork/
+
+# --- Local overrides of committed *.dist configs ---
+/.php-cs-fixer.php
+phpstan.neon
+phpunit.xml
+psalm.xml
+
+# --- Environment, logs & secrets ---
+.env
+.env.*
+!.env.example
+!.env.dist
+*.log
+
+# --- XOOPS / Smarty runtime (inside the module checkout) ---
+/templates_c/
+# Uncomment if your module writes user content or cache files here:
+# /uploads/
+# /cache/
+# cache/*.php
+
+# --- Baseline / overlay installer conflict artifacts ---
+*.overlay-new

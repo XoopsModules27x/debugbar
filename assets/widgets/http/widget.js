@@ -81,17 +81,15 @@
                     for (const key in request.details) {
                         if (typeof request.details[key] !== 'function') {
                             const row = document.createElement('tr');
-                            const keyTd = document.createElement('td');
-                            keyTd.classList.add(csscls('name'));
-                            keyTd.textContent = key;
-                            const valTd = document.createElement('td');
-                            valTd.classList.add(csscls('value'));
-                            const pre = document.createElement('pre');
-                            const code = document.createElement('code');
-                            code.textContent = String(request.details[key] ?? '');
-                            pre.append(code);
-                            valTd.append(pre);
-                            row.append(keyTd, valTd);
+                            const nameTd = document.createElement('td');
+                            nameTd.className = csscls('name');
+                            nameTd.textContent = key;
+                            row.append(nameTd);
+
+                            const valueTd = document.createElement('td');
+                            valueTd.className = csscls('value');
+                            PhpDebugBar.Widgets.renderSafeValueInto(valueTd, request.details[key]);
+                            row.append(valueTd);
                             tbody.append(row);
                         }
                     }

@@ -1,0 +1,63 @@
+# Optional SonarCloud analysis — XOOPS module DevOps baseline.
+#
+# OPT-IN security/SAST + quality dashboard. This COMPLEMENTS (does not replace) the
+# `composer qa` gate in ci.yml. It stays inert until a `SONAR_TOKEN` repo Actions secret
+# is set — so it's a no-op for modules that don't use SonarCloud and for fork PRs.
+#
+# To enable: import the repo in SonarCloud, set sonar.organization / sonar.projectKey in
+# sonar-project.properties, and add the SONAR_TOKEN secret. See README "Security analysis".
+name: SonarCloud
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  sonarcloud:
+    name: SonarCloud
+    runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      - name: Gate on SONAR_TOKEN (opt-in)
+        id: gate
+        run: |
+          if [ -n "$SONAR_TOKEN" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::SONAR_TOKEN not set — SonarCloud scan skipped (this analysis is opt-in)."
+          fi
+
+      - if: steps.gate.outputs.enabled == 'true'
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0            # full history for accurate new-code / blame detection
+          persist-credentials: false
+
+      - if: steps.gate.outputs.enabled == 'true'
+        name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.3'
+          coverage: pcov
+          tools: composer:v2
+
+      - if: steps.gate.outputs.enabled == 'true'
+        name: Install dependencies
+        run: composer install --no-interaction --no-progress
+
+      - if: steps.gate.outputs.enabled == 'true'
+        name: Generate coverage (best-effort; SAST runs regardless)
+        run: composer test -- --coverage-clover=.build/coverage/clover.xml || true
+
+      - if: steps.gate.outputs.enabled == 'true'
+        name: SonarCloud scan
+        uses: SonarSource/sonarqube-scan-action@713881670b6b3676cda39549040e2d88c70d582e # v8.2.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
