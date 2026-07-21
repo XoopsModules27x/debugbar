@@ -74,9 +74,10 @@ class RayLogger
     public static function getInstance(): self
     {
         static $instance = null;
-        if (!$instance instanceof self) {
+        if (! $instance instanceof self) {
             $instance = new self();
         }
+
         return $instance;
     }
 
@@ -132,11 +133,12 @@ class RayLogger
      */
     public function startTime(string $name = 'XOOPS', ?string $label = null): void
     {
-        if (!$this->activated) {
+        if (! $this->activated) {
             return;
         }
+
         try {
-            $key = $label ?: $name;
+            $key = $label !== null && $label !== '' ? $label : $name;
             $this->timerKeys[$name] = $key;
             ray()->measure($key);
         } catch (\Throwable $e) {
@@ -152,9 +154,10 @@ class RayLogger
      */
     public function stopTime(string $name = 'XOOPS'): void
     {
-        if (!$this->activated) {
+        if (! $this->activated) {
             return;
         }
+
         try {
             $key = isset($this->timerKeys[$name]) ? $this->timerKeys[$name] : $name;
             ray()->measure($key);
@@ -172,9 +175,10 @@ class RayLogger
      */
     public function addException(\Throwable $e): void
     {
-        if (!$this->activated) {
+        if (! $this->activated) {
             return;
         }
+
         try {
             ray()->exception($e)->color('red')->label(_MD_DEBUGBAR_RAY_EXCEPTION);
         } catch (\Throwable $ex) {
@@ -203,7 +207,7 @@ class RayLogger
      */
     public function log(mixed $level, string $message, array $context = []): void
     {
-        if (!$this->activated) {
+        if (! $this->activated) {
             return;
         }
 
@@ -214,21 +218,26 @@ class RayLogger
             switch ($channel) {
                 case 'queries':
                     $this->logQuery($level, $message, $context);
+
                     break;
                 case 'blocks':
                     $this->logBlock($message, $context);
+
                     break;
                 case 'deprecated':
                     ray($message)->color('orange')->label(_MD_DEBUGBAR_DEPRECATED);
+
                     break;
                 case 'extra':
-                    $name = isset($context['name']) ? $context['name'] : '';
-                    ray($message)->color('gray')->label($name ?: _MD_DEBUGBAR_EXTRA);
+                    $name = isset($context['name']) && is_scalar($context['name']) ? (string) $context['name'] : '';
+                    ray($message)->color('gray')->label($name !== '' ? $name : _MD_DEBUGBAR_EXTRA);
+
                     break;
                 default:
                     // General messages — map PSR-3 level to Ray color
                     $color = $this->levelToColor($level);
                     ray($message)->color($color)->label($this->levelToLabel($level));
+
                     break;
             }
         } catch (\Throwable $e) {
@@ -246,12 +255,12 @@ class RayLogger
      */
     private function logQuery(mixed $level, string $message, array $context): void
     {
-        $queryTime = !empty($context['query_time']) ? (float) $context['query_time'] : 0.0;
+        $queryTime = is_numeric($context['query_time'] ?? null) ? (float) $context['query_time'] : 0.0;
 
         // Track duplicates
         $this->queryCount++;
         $sqlKey = trim($message);
-        if (!isset($this->queryMap[$sqlKey])) {
+        if (! isset($this->queryMap[$sqlKey])) {
             $this->queryMap[$sqlKey] = 0;
         }
         $this->queryMap[$sqlKey]++;
@@ -264,7 +273,7 @@ class RayLogger
         if ($isDuplicate) {
             $label .= sprintf(_MD_DEBUGBAR_RAY_DUP, $this->queryMap[$sqlKey]);
         }
-        if ($timeStr) {
+        if ($timeStr !== '') {
             $label .= ' (' . $timeStr . ')';
         }
 
@@ -300,7 +309,7 @@ class RayLogger
      */
     private function logBlock(string $message, array $context): void
     {
-        $cached = !empty($context['cached']);
+        $cached = (bool) ($context['cached'] ?? false);
         $cacheTime = (int) ($context['cachetime'] ?? 0);
 
         $label = $cached
@@ -362,7 +371,7 @@ class RayLogger
     private static function xoopsLogger(): \XoopsLogger
     {
         $logger = \XoopsLogger::getInstance();
-        if (!$logger instanceof \XoopsLogger) {
+        if (! $logger instanceof \XoopsLogger) {
             throw new \RuntimeException('XOOPS logger is unavailable');
         }
 

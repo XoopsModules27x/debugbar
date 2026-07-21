@@ -12,13 +12,15 @@ final class MonologLogParser
     public function parse(string $contents): array
     {
         $entries = [];
-        foreach (preg_split('/\R/', $contents) ?: [] as $line) {
+        $lines = preg_split('/\R/', $contents);
+        foreach ($lines !== false ? $lines : [] as $line) {
             if ($line === '') {
                 continue;
             }
             $entry = $this->parseLine($line);
             $entries[] = $entry;
         }
+
         return $entries;
     }
 
@@ -36,9 +38,10 @@ final class MonologLogParser
         }
         $context = json_decode($matches[5], true);
         $extra = json_decode($matches[6], true);
-        if (!is_array($context) || !is_array($extra)) {
+        if (! is_array($context) || ! is_array($extra)) {
             return $fallback;
         }
+
         return [
             'parsed' => true,
             'raw' => $line,

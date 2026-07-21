@@ -5,11 +5,12 @@
 #
 # Copy to phpstan.neon to override locally; the .dist file stays in sync with the baseline.
 #
-# phpstan-strict-rules and phpstan-deprecation-rules are activated automatically by
-# phpstan/extension-installer (added to require-dev by the baseline installer). No manual
-# `includes` of their rules.neon is needed — and adding one would double-register them.
+# Load project extensions explicitly so local Windows analysis and Linux CI use
+# the same rule set without depending on Composer plugin-generated configuration.
 includes:
     - phpstan-baseline.neon
+    - vendor/phpstan/phpstan-deprecation-rules/rules.neon
+    - vendor/phpstan/phpstan-strict-rules/rules.neon
 
 parameters:
     level: 8

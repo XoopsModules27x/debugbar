@@ -29,7 +29,7 @@ if ($requested !== '') {
         echo '<p>' . $esc(_AM_DEBUGBAR_LOGS_MISSING) . '</p>';
     } else {
         $isMonolog = $requested !== 'legacy';
-        if (!$isMonolog) {
+        if (! $isMonolog) {
             echo '<p>' . $esc(_AM_DEBUGBAR_LOGS_TAIL_NOTE) . '</p>';
             echo '<pre class="debugbar-log-raw">' . $esc($contents) . '</pre>';
         } else {
@@ -44,12 +44,14 @@ if ($requested !== '') {
                 . '<th>' . $esc(_AM_DEBUGBAR_LOGS_LOCATION) . '</th><th>' . $esc(_AM_DEBUGBAR_LOGS_DETAILS) . '</th>'
                 . '</tr></thead><tbody>';
             foreach ($entries as $entry) {
-                if (!$entry['parsed']) {
+                if (! $entry['parsed']) {
                     echo '<tr><td colspan="6"><pre class="debugbar-log-raw">' . $esc($entry['raw']) . '</pre></td></tr>';
+
                     continue;
                 }
                 $level = in_array($entry['level'], ['debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency'], true)
                     ? $entry['level'] : 'debug';
+
                 try {
                     $timestamp = (new DateTimeImmutable($entry['timestamp']))
                         ->setTimezone(new DateTimeZone(date_default_timezone_get()))
@@ -67,13 +69,14 @@ if ($requested !== '') {
                 if ($file !== '' && str_starts_with($file, $root . '/')) {
                     $file = substr($file, strlen($root) + 1);
                 }
+                $location = $file . $line;
                 echo '<tr><td><time class="debugbar-log-time" datetime="' . $esc($entry['timestamp']) . '" title="' . $esc($timestamp) . '">'
                     . '<strong>' . $esc($timestamp) . '</strong></time></td>'
                     . '<td><span class="debugbar-log-level debugbar-log-level--' . $esc($level) . '">' . $esc($level) . '</span></td>'
                     . '<td class="debugbar-log-description">' . $esc($entry['message'])
                     . ($error !== '' ? ' <span class="debugbar-log-error">' . $esc($error) . '</span>' : '') . '</td>'
                     . '<td><span class="debugbar-log-channel">' . $esc($entry['channel']) . '</span></td>'
-                    . '<td class="debugbar-log-location">' . $esc($file . $line ?: '—') . '</td><td>';
+                    . '<td class="debugbar-log-location">' . $esc($location !== '' ? $location : '—') . '</td><td>';
                 if ($entry['context'] !== [] || $entry['extra'] !== []) {
                     $detail = ['context' => $entry['context']];
                     if ($entry['extra'] !== []) {
@@ -81,7 +84,7 @@ if ($requested !== '') {
                     }
                     $json = json_encode($detail, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
                     echo '<details class="debugbar-log-details"><summary>' . $esc(_AM_DEBUGBAR_LOGS_CONTEXT) . '</summary>'
-                        . '<pre class="debugbar-log-context">' . $esc($json ?: '{}') . '</pre></details>';
+                        . '<pre class="debugbar-log-context">' . $esc($json !== false ? $json : '{}') . '</pre></details>';
                 } else {
                     echo '—';
                 }
@@ -91,6 +94,7 @@ if ($requested !== '') {
         }
     }
     require_once __DIR__ . '/admin_footer.php';
+
     return;
 }
 

@@ -14,6 +14,7 @@ use Xmf\Module\Admin;
 use XoopsModules\Debugbar\{
     Helper
 };
+
 /** @var Admin $adminObject */
 /** @var \XoopsModules\Debugbar\Helper $helper */
 
@@ -25,7 +26,7 @@ $moduleDirNameUpper = mb_strtoupper($moduleDirName);
 $helper = Helper::getInstance();
 
 $pathIcon32 = Admin::menuIconPath('');
-$pathModIcon32 = XOOPS_URL .   '/modules/' . $moduleDirName . '/assets/images/icons/32/';
+$pathModIcon32 = XOOPS_URL . '/modules/' . $moduleDirName . '/assets/images/icons/32/';
 $module = $helper->getModule();
 if ($module instanceof \XoopsModule && false !== $module->getInfo('modicons32')) {
     $pathModIcon32 = $helper->url((string) $module->getInfo('modicons32'));
@@ -35,26 +36,26 @@ $adminmenu = [];
 
 $adminmenu[] = [
     'title' => _MI_DEBUGBAR_ADMENU1,
-    'link'  => 'admin/index.php',
+    'link' => 'admin/index.php',
     'icon' => $pathIcon32 . '/home.png',
 ];
 
 $adminmenu[] = [
     'title' => _MI_DEBUGBAR_MENU_ANALYTICS,
-    'link'  => 'admin/analytics.php',
-    'icon'  => $pathIcon32 . '/stats.png',
+    'link' => 'admin/analytics.php',
+    'icon' => $pathIcon32 . '/stats.png',
 ];
 
 $adminmenu[] = [
     'title' => _MI_DEBUGBAR_MENU_LOGS,
-    'link'  => 'admin/logs.php',
-    'icon'  => $pathIcon32 . '/compfile.png',
+    'link' => 'admin/logs.php',
+    'icon' => $pathIcon32 . '/compfile.png',
 ];
 
 $adminmenu[] = [
     'title' => _MI_DEBUGBAR_MENU_DIAGNOSTICS,
-    'link'  => 'admin/diagnostics.php',
-    'icon'  => $pathIcon32 . '/search.png',
+    'link' => 'admin/diagnostics.php',
+    'icon' => $pathIcon32 . '/search.png',
 ];
 
 $adminmenu[] = [

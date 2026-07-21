@@ -117,7 +117,7 @@ final class SystemDiagnostics
     private function packageRow(string $id, array $packages, bool $active = false): array
     {
         foreach ($packages as $package) {
-            if (!$this->packageInstalled($package)) {
+            if (! $this->packageInstalled($package)) {
                 continue;
             }
 
@@ -133,7 +133,7 @@ final class SystemDiagnostics
     /** @return array{id: string, value: string, status: string, detail: string} */
     private function tracyBootstrapRow(): array
     {
-        if (!defined('XOOPS_TRACY_STATUS')) {
+        if (! defined('XOOPS_TRACY_STATUS')) {
             return $this->packageRow('tracy', ['tracy/tracy']);
         }
 
@@ -141,18 +141,18 @@ final class SystemDiagnostics
         $detail = defined('XOOPS_TRACY_MESSAGE') ? (string) XOOPS_TRACY_MESSAGE : '';
 
         return match ($bootstrapStatus) {
-            'active'       => $this->row('tracy', 'Active', 'ok', $detail),
+            'active' => $this->row('tracy', 'Active', 'ok', $detail),
             'incompatible' => $this->row('tracy', 'Incompatible', 'warning', $detail),
-            'error'        => $this->row('tracy', 'Initialization failed', 'warning', $detail),
-            'missing'      => $this->row('tracy', 'Not installed', 'warning', $detail),
-            default        => $this->row('tracy', 'Disabled', 'info', $detail),
+            'error' => $this->row('tracy', 'Initialization failed', 'warning', $detail),
+            'missing' => $this->row('tracy', 'Not installed', 'warning', $detail),
+            default => $this->row('tracy', 'Disabled', 'info', $detail),
         };
     }
 
     /** @return array{id: string, value: string, status: string, detail: string} */
     private function writableRow(string $id, string $path): array
     {
-        if (!is_dir($path)) {
+        if (! is_dir($path)) {
             return $this->row($id, 'Missing', 'warning', 'Required directory was not found.');
         }
 
@@ -179,10 +179,10 @@ final class SystemDiagnostics
         }
 
         return match ($status) {
-            'invalid'    => $this->row('explain_secret', 'Invalid', 'warning', 'Run the module update to replace the signing key.'),
-            'unsafe'     => $this->row('explain_secret', 'Unsafe', 'warning', 'The signing-key destination is not a safe regular file.'),
+            'invalid' => $this->row('explain_secret', 'Invalid', 'warning', 'Run the module update to replace the signing key.'),
+            'unsafe' => $this->row('explain_secret', 'Unsafe', 'warning', 'The signing-key destination is not a safe regular file.'),
             'unwritable' => $this->row('explain_secret', 'Unwritable', 'warning', 'Make the protected XOOPS data directory writable and run the module update.'),
-            default      => $this->row('explain_secret', 'Missing', 'warning', 'Run the module update to create the signing key.'),
+            default => $this->row('explain_secret', 'Missing', 'warning', 'Run the module update to create the signing key.'),
         };
     }
 
@@ -204,7 +204,7 @@ final class SystemDiagnostics
 
     private function safeName(mixed $value): string
     {
-        if (!is_scalar($value)) {
+        if (! is_scalar($value)) {
             return '';
         }
 
@@ -215,7 +215,7 @@ final class SystemDiagnostics
 
     private function xdebugDetail(): string
     {
-        if (!extension_loaded('xdebug')) {
+        if (! extension_loaded('xdebug')) {
             return '';
         }
 
@@ -226,7 +226,7 @@ final class SystemDiagnostics
 
     private function opcacheDetail(): string
     {
-        if (!extension_loaded('Zend OPcache')) {
+        if (! extension_loaded('Zend OPcache')) {
             return '';
         }
 
@@ -235,7 +235,7 @@ final class SystemDiagnostics
 
     private function packageInstalled(string $package): bool
     {
-        if (!class_exists(\Composer\InstalledVersions::class)) {
+        if (! class_exists(\Composer\InstalledVersions::class)) {
             return false;
         }
 

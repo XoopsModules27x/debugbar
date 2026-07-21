@@ -87,24 +87,27 @@ class DebugbarCorePreload extends XoopsPreloadItem
         $logger = DebugbarLogger::getInstance();
 
         // Only show debugbar to admin users
-        if (empty($GLOBALS['xoopsUserIsAdmin'])) {
+        if (! (bool) ($GLOBALS['xoopsUserIsAdmin'] ?? false)) {
             $logger->disable();
             self::disableRay();
+
             return;
         }
 
         // Check if debug_mode is enabled in XOOPS config
-        if (isset($GLOBALS['xoopsConfig']['debug_mode']) && 0 == $GLOBALS['xoopsConfig']['debug_mode']) {
+        if (isset($GLOBALS['xoopsConfig']['debug_mode']) && (int) $GLOBALS['xoopsConfig']['debug_mode'] === 0) {
             $logger->disable();
             self::disableRay();
+
             return;
         }
 
         // Check module config if available
         $moduleConfig = self::getModuleConfig();
-        if (is_array($moduleConfig) && isset($moduleConfig['debugbar_enable']) && !$moduleConfig['debugbar_enable']) {
+        if (is_array($moduleConfig) && isset($moduleConfig['debugbar_enable']) && ! (bool) $moduleConfig['debugbar_enable']) {
             $logger->disable();
             self::disableRay();
+
             return;
         }
 
@@ -129,13 +132,15 @@ class DebugbarCorePreload extends XoopsPreloadItem
             $logger->setMemoryThreshold((int) $moduleConfig['memory_threshold'] * 1024 * 1024);
         }
         if (is_array($moduleConfig) && isset($moduleConfig['profile_button_enable'])) {
-            $logger->setProfileButtonEnabled(!empty($moduleConfig['profile_button_enable']));
+            $logger->setProfileButtonEnabled((bool) $moduleConfig['profile_button_enable']);
         }
 
         // Enable Ray only now (never at common.start): the request has reached
         // an authenticated admin with debug enabled. Honour the ray_enable
         // config; RayLogger::enable() itself no-ops unless spatie/ray exists.
-        $rayEnabled = !(is_array($moduleConfig) && isset($moduleConfig['ray_enable']) && !$moduleConfig['ray_enable']);
+        $rayEnabled = ! is_array($moduleConfig)
+            || ! array_key_exists('ray_enable', $moduleConfig)
+            || (bool) $moduleConfig['ray_enable'];
         if ($rayEnabled) {
             RayLogger::getInstance()->enable();
         } else {
@@ -173,7 +178,7 @@ class DebugbarCorePreload extends XoopsPreloadItem
         // If no admin user is authenticated, disable debug output.
         // eventCoreIncludeCommonAuthSuccess handles the admin case;
         // this catches anonymous requests where that event never fires.
-        if (empty($GLOBALS['xoopsUserIsAdmin'])) {
+        if (! (bool) ($GLOBALS['xoopsUserIsAdmin'] ?? false)) {
             $logger->disable();
             self::disableRay();
         }
@@ -195,7 +200,7 @@ class DebugbarCorePreload extends XoopsPreloadItem
     public static function eventXwhoopsHandlerConfigure(array $args): void
     {
         $handler = $args[0] ?? null;
-        if (!is_object($handler) || !method_exists($handler, 'addDataTableCallback')) {
+        if (! is_object($handler) || ! method_exists($handler, 'addDataTableCallback')) {
             return;
         }
         $handler->addDataTableCallback('DebugBar', static fn (): array => DebugbarLogger::getInstance()->whoopsSnapshot());
@@ -257,7 +262,7 @@ class DebugbarCorePreload extends XoopsPreloadItem
         // Add Smarty variables (controlled by module config, default: on)
         $showSmarty = true;
         if (is_array($moduleConfig) && isset($moduleConfig['debug_smarty_enable'])) {
-            $showSmarty = !empty($moduleConfig['debug_smarty_enable']);
+            $showSmarty = (bool) $moduleConfig['debug_smarty_enable'];
         }
         if ($showSmarty) {
             $logger->addSmarty();
@@ -265,7 +270,7 @@ class DebugbarCorePreload extends XoopsPreloadItem
 
         // Control included files tab (default: on)
         if (is_array($moduleConfig) && isset($moduleConfig['debug_files_enable'])) {
-            $logger->setShowIncludedFiles(!empty($moduleConfig['debug_files_enable']));
+            $logger->setShowIncludedFiles((bool) $moduleConfig['debug_files_enable']);
         }
     }
 
@@ -297,20 +302,20 @@ class DebugbarCorePreload extends XoopsPreloadItem
     private static function registerMonolog(): void
     {
         static $registered = false;
-        if ($registered || !class_exists('Monolog\\Logger')) {
+        if ($registered || ! class_exists('Monolog\\Logger')) {
             return;
         }
         $config = self::getModuleConfig();
-        if (is_array($config) && isset($config['monolog_enable']) && empty($config['monolog_enable'])) {
+        if (is_array($config) && isset($config['monolog_enable']) && ! (bool) $config['monolog_enable']) {
             return;
         }
         $levels = ['debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency'];
         $level = is_array($config) ? strtolower((string) ($config['monolog_level'] ?? 'warning')) : 'warning';
-        if (!in_array($level, $levels, true)) {
+        if (! in_array($level, $levels, true)) {
             $level = 'warning';
         }
         $adapterFile = XOOPS_ROOT_PATH . '/class/logger/monologlogger.php';
-        if (!is_file($adapterFile)) {
+        if (! is_file($adapterFile)) {
             return;
         }
         require_once $adapterFile;
@@ -325,7 +330,7 @@ class DebugbarCorePreload extends XoopsPreloadItem
     private static function xoopsLogger(): \XoopsLogger
     {
         $logger = \XoopsLogger::getInstance();
-        if (!$logger instanceof \XoopsLogger) {
+        if (! $logger instanceof \XoopsLogger) {
             throw new \RuntimeException('XOOPS logger is unavailable');
         }
 
@@ -352,6 +357,7 @@ class DebugbarCorePreload extends XoopsPreloadItem
             $debugbarModule = $moduleHandler->getByDirname('debugbar');
             if ($debugbarModule instanceof \XoopsModule) {
                 $config = $configHandler->getConfigsByCat(0, $debugbarModule->getVar('mid'));
+
                 return $config;
             }
         } catch (\Throwable $e) {
@@ -359,6 +365,7 @@ class DebugbarCorePreload extends XoopsPreloadItem
         }
 
         $config = false;
+
         return $config;
     }
 }

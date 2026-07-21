@@ -17,9 +17,9 @@ $xdebug = XdebugStatus::read();
 $cachegrindCatalog = new CachegrindCatalog($xdebug['output_dir']);
 $action = Request::getCmd('action', '', 'POST');
 if ($action === 'purge_cachegrind') {
-    if (!isset($GLOBALS['xoopsSecurity'])
-        || !$GLOBALS['xoopsSecurity'] instanceof \XoopsSecurity
-        || !$GLOBALS['xoopsSecurity']->check(true, false, 'DEBUGBAR_CACHEGRIND')) {
+    if (! isset($GLOBALS['xoopsSecurity'])
+        || ! $GLOBALS['xoopsSecurity'] instanceof \XoopsSecurity
+        || ! $GLOBALS['xoopsSecurity']->check(true, false, 'DEBUGBAR_CACHEGRIND')) {
         redirect_header('analytics.php', 3, _AM_DEBUGBAR_AN_CG_BAD_TOKEN);
     }
 
@@ -45,6 +45,7 @@ $renderTable = static function (string $title, array $headers, array $rows) use 
     }
     if ($rows === []) {
         echo '<p>' . $esc(_AM_DEBUGBAR_AN_NODATA) . '</p>';
+
         return;
     }
 
@@ -58,6 +59,7 @@ $renderTable = static function (string $title, array $headers, array $rows) use 
         foreach ($row as $value) {
             if (is_array($value) && isset($value['html'])) {
                 echo '<td style="padding:5px">' . $value['html'] . '</td>';
+
                 continue;
             }
             echo '<td style="padding:5px">' . $esc($value) . '</td>';
@@ -76,14 +78,15 @@ if ($requestedRecord !== '') {
         echo '<p>' . $esc(_AM_DEBUGBAR_AN_RECORD_MISSING) . '</p>';
     } else {
         $json = json_encode($record, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_PARTIAL_OUTPUT_ON_ERROR);
-        echo '<pre style="max-height:70vh;overflow:auto;padding:12px;border:1px solid #ccc">' . $esc($json ?: '{}') . '</pre>';
+        echo '<pre style="max-height:70vh;overflow:auto;padding:12px;border:1px solid #ccc">' . $esc($json !== false ? $json : '{}') . '</pre>';
     }
     require_once __DIR__ . '/admin_footer.php';
+
     return;
 }
 
 $days = Request::getInt('days', 7, 'GET');
-if (!in_array($days, [1, 7, 30], true)) {
+if (! in_array($days, [1, 7, 30], true)) {
     $days = 7;
 }
 
@@ -99,7 +102,7 @@ echo ' &mdash; ' . $esc(sprintf(_AM_DEBUGBAR_AN_ROWCOUNT, number_format($reposit
 
 echo '<h2>' . $esc(_AM_DEBUGBAR_AN_OPCACHE) . '</h2>';
 $opcache = function_exists('opcache_get_status') ? opcache_get_status(false) : false;
-if (!is_array($opcache)) {
+if (! is_array($opcache)) {
     echo '<p>' . $esc(_AM_DEBUGBAR_AN_OPCACHE_UNAVAILABLE) . '</p>';
 } else {
     $hits = (int) ($opcache['opcache_statistics']['hits'] ?? 0);
@@ -116,13 +119,13 @@ if (!is_array($opcache)) {
 
 $worstRows = [];
 foreach ($repository->worstUrls($days) as $row) {
-    $worstRows[] = [$row['url'], $row['dirname'] ?: '—', $row['hits'], $number($row['avg_ms']), $number($row['max_ms']), $number($row['avg_queries']), $row['max_nplus1'], $row['violations']];
+    $worstRows[] = [$row['url'], $row['dirname'] !== '' ? $row['dirname'] : '—', $row['hits'], $number($row['avg_ms']), $number($row['max_ms']), $number($row['avg_queries']), $row['max_nplus1'], $row['violations']];
 }
 $renderTable(_AM_DEBUGBAR_AN_WORST, [_AM_DEBUGBAR_AN_URL, _AM_DEBUGBAR_AN_MODULE, _AM_DEBUGBAR_AN_HITS, _AM_DEBUGBAR_AN_AVG_MS, _AM_DEBUGBAR_AN_MAX_MS, _AM_DEBUGBAR_AN_AVG_QUERIES, _AM_DEBUGBAR_AN_MAX_NPLUS1, _AM_DEBUGBAR_AN_VIOLATIONS], $worstRows);
 
 $nPlusOneRows = [];
 foreach ($repository->nPlusOneLeaders($days) as $row) {
-    $nPlusOneRows[] = [$row['url'], $row['dirname'] ?: '—', $row['hits'], $row['max_nplus1'], $number($row['avg_queries']), $row['sample_fp']];
+    $nPlusOneRows[] = [$row['url'], $row['dirname'] !== '' ? $row['dirname'] : '—', $row['hits'], $row['max_nplus1'], $number($row['avg_queries']), $row['sample_fp']];
 }
 $renderTable(_AM_DEBUGBAR_AN_NPLUS1, [_AM_DEBUGBAR_AN_URL, _AM_DEBUGBAR_AN_MODULE, _AM_DEBUGBAR_AN_HITS, _AM_DEBUGBAR_AN_MAX_NPLUS1, _AM_DEBUGBAR_AN_AVG_QUERIES, _AM_DEBUGBAR_AN_SAMPLE_FP], $nPlusOneRows);
 
@@ -134,7 +137,7 @@ $renderTable(_AM_DEBUGBAR_AN_MODULES, [_AM_DEBUGBAR_AN_MODULE, _AM_DEBUGBAR_AN_H
 
 $violationRows = [];
 foreach ($repository->recentViolations() as $row) {
-    $violationRows[] = [date('Y-m-d H:i:s', (int) $row['created']), $row['url'], $row['dirname'] ?: '—', $number($row['total_ms']), $row['query_count'], implode(', ', BudgetChecker::decodeFlags((int) $row['flags']))];
+    $violationRows[] = [date('Y-m-d H:i:s', (int) $row['created']), $row['url'], $row['dirname'] !== '' ? $row['dirname'] : '—', $number($row['total_ms']), $row['query_count'], implode(', ', BudgetChecker::decodeFlags((int) $row['flags']))];
 }
 $renderTable(_AM_DEBUGBAR_AN_VIOLATIONS_FEED, [_AM_DEBUGBAR_AN_WHEN, _AM_DEBUGBAR_AN_URL, _AM_DEBUGBAR_AN_MODULE, _AM_DEBUGBAR_AN_TOTAL_MS, _AM_DEBUGBAR_AN_QUERIES, _AM_DEBUGBAR_AN_FLAGS], $violationRows);
 
@@ -152,10 +155,11 @@ foreach ($recorder->listRecords() as $record) {
 $renderTable(_AM_DEBUGBAR_AN_FLIGHT, [_AM_DEBUGBAR_AN_WHEN, _AM_DEBUGBAR_AN_STATUS, _AM_DEBUGBAR_AN_REQUEST, _AM_DEBUGBAR_AN_SIZE, ''], $flightRows);
 
 echo '<h2>' . $esc(_AM_DEBUGBAR_AN_CG_SECTION) . '</h2>';
+$xdebugModes = implode(', ', $xdebug['modes']);
 echo '<p><strong>' . $esc(_AM_DEBUGBAR_AN_CG_EXTENSION) . ':</strong> ' . $esc($xdebug['loaded'] ? _AM_DEBUGBAR_AN_CG_LOADED : _AM_DEBUGBAR_AN_CG_NOT_LOADED) . ' &nbsp; '
-    . '<strong>' . $esc(_AM_DEBUGBAR_AN_CG_MODES) . ':</strong> ' . $esc(implode(', ', $xdebug['modes']) ?: '—') . ' &nbsp; '
-    . '<strong>' . $esc(_AM_DEBUGBAR_AN_CG_START) . ':</strong> ' . $esc($xdebug['start_with_request'] ?: '—') . '<br>'
-    . '<strong>' . $esc(_AM_DEBUGBAR_AN_CG_DIR) . ':</strong> ' . $esc($xdebug['output_dir'] ?: '—') . ' (' . $esc($xdebug['directory_state']) . ') &nbsp; '
+    . '<strong>' . $esc(_AM_DEBUGBAR_AN_CG_MODES) . ':</strong> ' . $esc($xdebugModes !== '' ? $xdebugModes : '—') . ' &nbsp; '
+    . '<strong>' . $esc(_AM_DEBUGBAR_AN_CG_START) . ':</strong> ' . $esc($xdebug['start_with_request'] !== '' ? $xdebug['start_with_request'] : '—') . '<br>'
+    . '<strong>' . $esc(_AM_DEBUGBAR_AN_CG_DIR) . ':</strong> ' . $esc($xdebug['output_dir'] !== '' ? $xdebug['output_dir'] : '—') . ' (' . $esc($xdebug['directory_state']) . ') &nbsp; '
     . '<strong>' . $esc(_AM_DEBUGBAR_AN_CG_ZLIB) . ':</strong> ' . $esc($xdebug['zlib'] ? _AM_DEBUGBAR_AN_CG_LOADED : _AM_DEBUGBAR_AN_CG_NOT_LOADED) . '</p>';
 
 $cachegrindRows = [];
@@ -167,7 +171,7 @@ $purgeConfirmation = json_encode(_AM_DEBUGBAR_AN_CG_PURGE_CONFIRM, JSON_HEX_TAG 
 echo '<form method="post" action="analytics.php" style="margin-block:12px">'
     . $GLOBALS['xoopsSecurity']->getTokenHTML('DEBUGBAR_CACHEGRIND')
     . '<input type="hidden" name="action" value="purge_cachegrind">'
-    . '<button class="formButton" type="submit" onclick="return confirm(' . $esc($purgeConfirmation ?: '""') . ')">'
+    . '<button class="formButton" type="submit" onclick="return confirm(' . $esc($purgeConfirmation !== false ? $purgeConfirmation : '""') . ')">'
     . $esc(_AM_DEBUGBAR_AN_CG_PURGE)
     . '</button></form>';
 echo '<p>' . $esc(_AM_DEBUGBAR_AN_CG_ALTERNATIVES) . '</p>';

@@ -19,17 +19,18 @@ final class CachegrindCatalog
     /** @return list<array{file: string, modified: int, size: int}> */
     public function listFiles(int $limit = 50): array
     {
-        if ($this->directory === '' || !is_dir($this->directory) || !is_readable($this->directory)) {
+        if ($this->directory === '' || ! is_dir($this->directory) || ! is_readable($this->directory)) {
             return [];
         }
 
         $files = [];
+
         try {
             foreach (new \FilesystemIterator($this->directory, \FilesystemIterator::SKIP_DOTS) as $item) {
-                if (!$item instanceof \SplFileInfo
-                    || !$item->isFile()
+                if (! $item instanceof \SplFileInfo
+                    || ! $item->isFile()
                     || $item->isLink()
-                    || !self::isValidFilename($item->getFilename())) {
+                    || ! self::isValidFilename($item->getFilename())) {
                     continue;
                 }
                 $files[] = [
@@ -49,13 +50,13 @@ final class CachegrindCatalog
 
     public function resolve(string $filename): ?string
     {
-        if (!self::isValidFilename($filename) || $this->directory === '') {
+        if (! self::isValidFilename($filename) || $this->directory === '') {
             return null;
         }
 
         $base = realpath($this->directory);
         $path = realpath($this->directory . DIRECTORY_SEPARATOR . $filename);
-        if ($base === false || $path === false || is_link($path) || !is_file($path)) {
+        if ($base === false || $path === false || is_link($path) || ! is_file($path)) {
             return null;
         }
 
@@ -71,19 +72,20 @@ final class CachegrindCatalog
      */
     public function purgeOlderThan(int $days): int
     {
-        if ($days < 1 || $this->directory === '' || !is_dir($this->directory) || !is_readable($this->directory)) {
+        if ($days < 1 || $this->directory === '' || ! is_dir($this->directory) || ! is_readable($this->directory)) {
             return 0;
         }
 
         $cutoff = time() - ($days * 86400);
         $purged = 0;
+
         try {
             foreach (new \FilesystemIterator($this->directory, \FilesystemIterator::SKIP_DOTS) as $item) {
-                if (!$item instanceof \SplFileInfo
-                    || !$item->isFile()
+                if (! $item instanceof \SplFileInfo
+                    || ! $item->isFile()
                     || $item->isLink()
                     || $item->getMTime() >= $cutoff
-                    || !self::isValidFilename($item->getFilename())) {
+                    || ! self::isValidFilename($item->getFilename())) {
                     continue;
                 }
 
@@ -106,6 +108,7 @@ final class CachegrindCatalog
                 throw new \ErrorException($message, 0, $severity, $file, $line);
             }
         );
+
         try {
             return unlink($path);
         } catch (\Throwable) {
@@ -118,7 +121,7 @@ final class CachegrindCatalog
     private static function isValidFilename(string $filename): bool
     {
         return $filename === basename($filename)
-            && !str_contains($filename, '..')
+            && ! str_contains($filename, '..')
             && preg_match('/^cachegrind\.out\.[A-Za-z0-9._-]+$/D', $filename) === 1;
     }
 }

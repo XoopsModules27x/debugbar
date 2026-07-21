@@ -26,6 +26,7 @@ final class DiagnosticSanitizer
         foreach ($values as $key => $value) {
             if ($count >= self::MAX_ENTRIES) {
                 $result['[truncated]'] = sprintf('%d additional entries omitted', count($values) - $count);
+
                 break;
             }
             ++$count;
@@ -33,20 +34,24 @@ final class DiagnosticSanitizer
             $keyName = (string) $key;
             if ($this->isSensitiveKey($keyName)) {
                 $result[$key] = self::REDACTED;
+
                 continue;
             }
             if (is_string($value) && in_array(strtolower($keyName), ['url', 'uri'], true)) {
                 $result[$key] = $this->sanitizeUrl($value);
+
                 continue;
             }
             if (is_array($value)) {
                 $result[$key] = $depth + 1 >= self::MAX_DEPTH
                     ? '[maximum depth reached]'
                     : $this->sanitize($value, $depth + 1);
+
                 continue;
             }
             if (is_string($value)) {
                 $result[$key] = $this->truncate($value);
+
                 continue;
             }
             $result[$key] = is_scalar($value) || $value === null ? $value : get_debug_type($value);
@@ -66,6 +71,7 @@ final class DiagnosticSanitizer
         foreach ($cookies as $key => $value) {
             if ($count >= self::MAX_ENTRIES) {
                 $result['[truncated]'] = sprintf('%d additional entries omitted', count($cookies) - $count);
+
                 break;
             }
             ++$count;
@@ -110,7 +116,7 @@ final class DiagnosticSanitizer
     private function sanitizeQuery(string $query): string
     {
         $parts = preg_split('/([&;])/', $query, -1, PREG_SPLIT_DELIM_CAPTURE);
-        if (!is_array($parts)) {
+        if (! is_array($parts)) {
             return '';
         }
 
@@ -124,6 +130,7 @@ final class DiagnosticSanitizer
             $decodedKey = rawurldecode(str_replace('+', ' ', $rawKey));
             if ($this->isSensitiveKey($decodedKey)) {
                 $parts[$index] = $rawKey . '=' . rawurlencode(self::REDACTED);
+
                 continue;
             }
             if ($rawValue !== null) {

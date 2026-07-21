@@ -14,7 +14,7 @@ final class DebugbarCoreConfig
     {
         $handler = xoops_getHandler('config');
         $modules = xoops_getHandler('module');
-        if (!$handler instanceof \XoopsConfigHandler || !$modules instanceof \XoopsModuleHandler) {
+        if (! $handler instanceof \XoopsConfigHandler || ! $modules instanceof \XoopsModuleHandler) {
             return [];
         }
         $module = $modules->getByDirname('debugbar');
