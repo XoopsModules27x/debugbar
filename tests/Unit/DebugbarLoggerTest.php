@@ -6,6 +6,7 @@ namespace XoopsModules\Debugbar\Tests\Unit;
 
 use DebugBar\DataCollector\MessagesCollector;
 use DebugBar\DataFormatter\JsonDataFormatter;
+use DebugBar\JavascriptRenderer;
 use DebugBar\StandardDebugBar;
 use PHPUnit\Framework\TestCase;
 use XoopsModules\Debugbar\DebugbarLogger;
@@ -41,9 +42,9 @@ final class DebugbarLoggerTest extends TestCase
 
         $renderer = $logger->getRenderer();
         self::assertNotFalse($renderer);
-        $assets = $renderer->getAssets(null);
-        self::assertContains('vardumper.js', $assets['js']);
-        self::assertContains('vardumper.css', $assets['css']);
+        $assets = $renderer->getAssets(JavascriptRenderer::RELATIVE_URL);
+        self::assertContains('vardumper.js', array_map('basename', $assets['js']));
+        self::assertContains('vardumper.css', array_map('basename', $assets['css']));
 
         foreach (['messages', 'Deprecated', 'Blocks', 'Extra', 'Queries', 'Cache', 'HTTP', 'Mail'] as $name) {
             $collector = $debugbar->getCollector($name);
@@ -55,15 +56,22 @@ final class DebugbarLoggerTest extends TestCase
         self::assertInstanceOf(MessagesCollector::class, $collector);
         $collector->warning('Slow request', [
             'request' => ['method' => 'GET', 'uri' => '/modules/xcontact/'],
+            'null_value' => null,
+            'false_value' => false,
+            'zero_value' => 0,
+            'empty_value' => '',
         ]);
 
         $data = $collector->collect();
         $message = $data['messages'][0];
         self::assertNull($message['context']['request']);
-        self::assertSame(
-            ['method' => 'GET', 'uri' => '/modules/xcontact/'],
-            $message['context_json']['request']
-        );
+        self::assertSame([
+            'request' => ['method' => 'GET', 'uri' => '/modules/xcontact/'],
+            'null_value' => null,
+            'false_value' => false,
+            'zero_value' => 0,
+            'empty_value' => '',
+        ], $message['context_json']);
         self::assertStringNotContainsString('<pre', (string) json_encode($message));
     }
 }

@@ -66,7 +66,7 @@
             return;
         }
 
-        el.textContent = value == null ? '' : String(value);
+        el.textContent = value === null ? 'null' : value === undefined ? '' : String(value);
     };
 
     /**

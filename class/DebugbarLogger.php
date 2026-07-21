@@ -204,7 +204,6 @@ class DebugbarLogger
                 $renderer = $this->debugbar->getJavascriptRenderer();
                 $this->renderer = $renderer;
                 $renderer->setUseDistFiles(false);
-                $renderer->addAssets(['vardumper.css'], ['vardumper.js']);
 
                 // Add custom collectors for XOOPS channels
                 $this->debugbar->addCollector(new MessagesCollector('Deprecated'));
@@ -217,10 +216,13 @@ class DebugbarLogger
 
                 // Render structured message context client-side. This avoids
                 // embedding HTML dumps while preserving safe, expandable values.
-                $formatter = new JsonDataFormatter();
-                foreach ($this->debugbar->getCollectors() as $collector) {
-                    if ($collector instanceof MessagesCollector) {
-                        $collector->setDataFormatter($formatter);
+                if (class_exists(JsonDataFormatter::class)) {
+                    $renderer->addAssets(['vardumper.css'], ['vardumper.js']);
+                    $formatter = new JsonDataFormatter();
+                    foreach ($this->debugbar->getCollectors() as $collector) {
+                        if ($collector instanceof MessagesCollector) {
+                            $collector->setDataFormatter($formatter);
+                        }
                     }
                 }
 
