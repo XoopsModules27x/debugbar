@@ -8,8 +8,19 @@ use DebugBar\DataCollector\MessagesCollector;
 use DebugBar\DataFormatter\JsonDataFormatter;
 use DebugBar\StandardDebugBar;
 use PHPUnit\Framework\TestCase;
-use ReflectionClass;
 use XoopsModules\Debugbar\DebugbarLogger;
+
+final class XoopsLoggerStub
+{
+    public static function getInstance(): self
+    {
+        return new self();
+    }
+
+    public function addLogger(object $logger): void
+    {
+    }
+}
 
 final class DebugbarLoggerTest extends TestCase
 {
@@ -18,10 +29,11 @@ final class DebugbarLoggerTest extends TestCase
         if (! defined('XOOPS_ROOT_PATH')) {
             define('XOOPS_ROOT_PATH', dirname(__DIR__, 3));
         }
+        if (! class_exists(\XoopsLogger::class)) {
+            class_alias(XoopsLoggerStub::class, \XoopsLogger::class);
+        }
 
-        $reflection = new ReflectionClass(DebugbarLogger::class);
-        /** @var DebugbarLogger $logger */
-        $logger = $reflection->newInstanceWithoutConstructor();
+        $logger = new DebugbarLogger();
         $logger->enable();
 
         $debugbar = $logger->getDebugbar();
