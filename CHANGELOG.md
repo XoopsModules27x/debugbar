@@ -4,6 +4,22 @@ All notable changes to the XOOPS DebugBar module are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses semantic versioning.
 
+## [1.3.2] - 2026-07-21
+
+### Security
+
+- Rendered message-context scalar values as text while preserving structured JSON dumps, preventing diagnostic strings from being interpreted as HTML.
+- Limited message-context iteration to own enumerable properties and preserved valid falsy values such as `0`, `false`, and empty strings.
+
+### Fixed
+
+- Restored interactive Debugbar tabs and expandable message details by loading the JSON VarDumper assets explicitly.
+- Replaced raw Symfony dump markup in message contexts with safe, structured, collapsible arrays.
+
+### Changed
+
+- Added regression coverage for JSON message formatting, required VarDumper assets, context serialization, and normal logger construction without XOOPS runtime side effects.
+
 ## [1.3.1] - 2026-07-21
 
 ### Security

@@ -66,7 +66,7 @@
             return;
         }
 
-        el.textContent = value == null ? '' : String(value);
+        el.textContent = value === null ? 'null' : value === undefined ? '' : String(value);
     };
 
     /**
@@ -680,7 +680,7 @@
                     contextTable.innerHTML = '<tr><th colspan="2">Context</th></tr>';
 
                     const contextJsonData = value.context_json || {};
-                    for (const key in value.context) {
+                    for (const key of Object.keys(value.context)) {
                         if (typeof value.context[key] !== 'function') {
                             const tr = document.createElement('tr');
                             const td1 = document.createElement('td');
@@ -690,8 +690,8 @@
 
                             const td2 = document.createElement('td');
                             td2.classList.add(csscls('value'));
-                            if (contextJsonData[key]) {
-                                PhpDebugBar.Widgets.renderValueInto(td2, contextJsonData[key]);
+                            if (Object.prototype.hasOwnProperty.call(contextJsonData, key)) {
+                                PhpDebugBar.Widgets.renderSafeValueInto(td2, contextJsonData[key]);
                             } else {
                                 td2.textContent = value.context[key];
                             }
