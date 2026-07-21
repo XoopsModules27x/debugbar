@@ -138,7 +138,7 @@ class RayLogger
         }
 
         try {
-            $key = $label ?: $name;
+            $key = $label !== null && $label !== '' ? $label : $name;
             $this->timerKeys[$name] = $key;
             ray()->measure($key);
         } catch (\Throwable $e) {
@@ -229,8 +229,8 @@ class RayLogger
 
                     break;
                 case 'extra':
-                    $name = isset($context['name']) ? $context['name'] : '';
-                    ray($message)->color('gray')->label($name ?: _MD_DEBUGBAR_EXTRA);
+                    $name = isset($context['name']) && is_scalar($context['name']) ? (string) $context['name'] : '';
+                    ray($message)->color('gray')->label($name !== '' ? $name : _MD_DEBUGBAR_EXTRA);
 
                     break;
                 default:
@@ -255,7 +255,7 @@ class RayLogger
      */
     private function logQuery(mixed $level, string $message, array $context): void
     {
-        $queryTime = ! empty($context['query_time']) ? (float) $context['query_time'] : 0.0;
+        $queryTime = is_numeric($context['query_time'] ?? null) ? (float) $context['query_time'] : 0.0;
 
         // Track duplicates
         $this->queryCount++;
@@ -273,7 +273,7 @@ class RayLogger
         if ($isDuplicate) {
             $label .= sprintf(_MD_DEBUGBAR_RAY_DUP, $this->queryMap[$sqlKey]);
         }
-        if ($timeStr) {
+        if ($timeStr !== '') {
             $label .= ' (' . $timeStr . ')';
         }
 
@@ -309,7 +309,7 @@ class RayLogger
      */
     private function logBlock(string $message, array $context): void
     {
-        $cached = ! empty($context['cached']);
+        $cached = (bool) ($context['cached'] ?? false);
         $cacheTime = (int) ($context['cachetime'] ?? 0);
 
         $label = $cached

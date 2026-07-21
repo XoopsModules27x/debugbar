@@ -87,7 +87,7 @@ class DebugbarCorePreload extends XoopsPreloadItem
         $logger = DebugbarLogger::getInstance();
 
         // Only show debugbar to admin users
-        if (empty($GLOBALS['xoopsUserIsAdmin'])) {
+        if (! (bool) ($GLOBALS['xoopsUserIsAdmin'] ?? false)) {
             $logger->disable();
             self::disableRay();
 
@@ -95,7 +95,7 @@ class DebugbarCorePreload extends XoopsPreloadItem
         }
 
         // Check if debug_mode is enabled in XOOPS config
-        if (isset($GLOBALS['xoopsConfig']['debug_mode']) && 0 == $GLOBALS['xoopsConfig']['debug_mode']) {
+        if (isset($GLOBALS['xoopsConfig']['debug_mode']) && (int) $GLOBALS['xoopsConfig']['debug_mode'] === 0) {
             $logger->disable();
             self::disableRay();
 
@@ -104,7 +104,7 @@ class DebugbarCorePreload extends XoopsPreloadItem
 
         // Check module config if available
         $moduleConfig = self::getModuleConfig();
-        if (is_array($moduleConfig) && isset($moduleConfig['debugbar_enable']) && ! $moduleConfig['debugbar_enable']) {
+        if (is_array($moduleConfig) && isset($moduleConfig['debugbar_enable']) && ! (bool) $moduleConfig['debugbar_enable']) {
             $logger->disable();
             self::disableRay();
 
@@ -132,13 +132,15 @@ class DebugbarCorePreload extends XoopsPreloadItem
             $logger->setMemoryThreshold((int) $moduleConfig['memory_threshold'] * 1024 * 1024);
         }
         if (is_array($moduleConfig) && isset($moduleConfig['profile_button_enable'])) {
-            $logger->setProfileButtonEnabled(! empty($moduleConfig['profile_button_enable']));
+            $logger->setProfileButtonEnabled((bool) $moduleConfig['profile_button_enable']);
         }
 
         // Enable Ray only now (never at common.start): the request has reached
         // an authenticated admin with debug enabled. Honour the ray_enable
         // config; RayLogger::enable() itself no-ops unless spatie/ray exists.
-        $rayEnabled = ! (is_array($moduleConfig) && isset($moduleConfig['ray_enable']) && ! $moduleConfig['ray_enable']);
+        $rayEnabled = ! is_array($moduleConfig)
+            || ! array_key_exists('ray_enable', $moduleConfig)
+            || (bool) $moduleConfig['ray_enable'];
         if ($rayEnabled) {
             RayLogger::getInstance()->enable();
         } else {
@@ -176,7 +178,7 @@ class DebugbarCorePreload extends XoopsPreloadItem
         // If no admin user is authenticated, disable debug output.
         // eventCoreIncludeCommonAuthSuccess handles the admin case;
         // this catches anonymous requests where that event never fires.
-        if (empty($GLOBALS['xoopsUserIsAdmin'])) {
+        if (! (bool) ($GLOBALS['xoopsUserIsAdmin'] ?? false)) {
             $logger->disable();
             self::disableRay();
         }
@@ -260,7 +262,7 @@ class DebugbarCorePreload extends XoopsPreloadItem
         // Add Smarty variables (controlled by module config, default: on)
         $showSmarty = true;
         if (is_array($moduleConfig) && isset($moduleConfig['debug_smarty_enable'])) {
-            $showSmarty = ! empty($moduleConfig['debug_smarty_enable']);
+            $showSmarty = (bool) $moduleConfig['debug_smarty_enable'];
         }
         if ($showSmarty) {
             $logger->addSmarty();
@@ -268,7 +270,7 @@ class DebugbarCorePreload extends XoopsPreloadItem
 
         // Control included files tab (default: on)
         if (is_array($moduleConfig) && isset($moduleConfig['debug_files_enable'])) {
-            $logger->setShowIncludedFiles(! empty($moduleConfig['debug_files_enable']));
+            $logger->setShowIncludedFiles((bool) $moduleConfig['debug_files_enable']);
         }
     }
 
@@ -304,7 +306,7 @@ class DebugbarCorePreload extends XoopsPreloadItem
             return;
         }
         $config = self::getModuleConfig();
-        if (is_array($config) && isset($config['monolog_enable']) && empty($config['monolog_enable'])) {
+        if (is_array($config) && isset($config['monolog_enable']) && ! (bool) $config['monolog_enable']) {
             return;
         }
         $levels = ['debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency'];

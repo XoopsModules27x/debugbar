@@ -66,13 +66,15 @@ final class Helper extends \Xmf\Module\Helper
     /**
      * Get an Object Handler
      *
-     * @param string $name name of handler to load
+     * @param mixed $name name of handler to load
      *
      * @return object
      */
-    public function getHandler($name)
+    public function getHandler(mixed $name): object
     {
-        $ret = null;
+        if (! is_string($name) || $name === '') {
+            throw new \InvalidArgumentException('Handler name must be a non-empty string');
+        }
 
         $class = __NAMESPACE__ . '\\' . \ucfirst($name) . 'Handler';
         if (! \class_exists($class)) {
@@ -81,9 +83,9 @@ final class Helper extends \Xmf\Module\Helper
         /** @var \XoopsMySQLDatabase $db */
         $db = \XoopsDatabaseFactory::getDatabaseConnection();
         $helper = self::getInstance();
-        $ret = new $class($db, $helper);
+        $handler = new $class($db, $helper);
         $this->addLog("Getting handler '$name'");
 
-        return $ret;
+        return $handler;
     }
 }

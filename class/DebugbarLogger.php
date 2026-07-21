@@ -193,7 +193,7 @@ class DebugbarLogger
      */
     public function enable(): void
     {
-        if (! $this->debugbar) {
+        if ($this->debugbar === false) {
             if (! class_exists('DebugBar\StandardDebugBar')) {
                 return;
             }
@@ -591,7 +591,8 @@ class DebugbarLogger
     {
         unset($mail['body'], $mail['html']);
         $mail = $this->redact($mail);
-        $this->recordMessage('Mail', sprintf('%s → %s', $mail['subject'] ?? '(no subject)', $mail['to'] ?? ''), ! empty($mail['success']) ? LogLevel::INFO : LogLevel::ERROR, $mail);
+        $mailSucceeded = (bool) ($mail['success'] ?? false);
+        $this->recordMessage('Mail', sprintf('%s → %s', $mail['subject'] ?? '(no subject)', $mail['to'] ?? ''), $mailSucceeded ? LogLevel::INFO : LogLevel::ERROR, $mail);
     }
 
     /** Add a searchable tag to the current request profile. */
@@ -628,7 +629,8 @@ class DebugbarLogger
         $peakMemory = memory_get_peak_usage(true);
         $request = $this->requestContext();
         $request['request_id'] = $this->requestId();
-        $request['status'] = http_response_code() ?: 200;
+        $status = http_response_code();
+        $request['status'] = is_int($status) ? $status : 200;
         $request['duration'] = sprintf('%.2f ms', $duration * 1000);
         $request['peak_memory'] = $this->formatBytes($peakMemory);
         $request['included_files'] = count(get_included_files());
@@ -651,7 +653,8 @@ class DebugbarLogger
                 $lifecycle[$name] = sprintf('%.2f ms', $measure * 1000);
             }
             arsort($this->lifecycleMeasures);
-            $lifecycle['slowest'] = key($this->lifecycleMeasures) ?: '';
+            $slowest = key($this->lifecycleMeasures);
+            $lifecycle['slowest'] = is_string($slowest) ? $slowest : '';
             $this->debugbar->addCollector(new ConfigCollector($lifecycle, 'Lifecycle'));
         }
 
@@ -722,10 +725,10 @@ class DebugbarLogger
     {
         $id = Request::getString('HTTP_X_REQUEST_ID', '', 'SERVER');
         if ($id !== '') {
-            return (string) $id;
+            return $id;
         }
-        static $generated;
-        if (! $generated) {
+        static $generated = '';
+        if ($generated === '') {
             try {
                 $generated = bin2hex(random_bytes(8));
             } catch (\Throwable $e) {
@@ -756,14 +759,16 @@ class DebugbarLogger
             }
         }
 
-        return (string) (ini_get('zlib.output_compression') ?: 'none');
+        $compression = ini_get('zlib.output_compression');
+
+        return $compression !== false && $compression !== '' ? $compression : 'none';
     }
 
     private function cacheHeaders(): string
     {
         $headers = [];
         foreach (headers_list() as $header) {
-            if (preg_match('/^(cache-control|etag|expires|last-modified|vary):/i', $header)) {
+            if (preg_match('/^(cache-control|etag|expires|last-modified|vary):/i', $header) === 1) {
                 $headers[] = $header;
             }
         }
@@ -971,7 +976,7 @@ class DebugbarLogger
                 case 'blocks':
                     $channel = 'Blocks';
                     $msg = $message . ': ';
-                    if (! empty($context['cached'])) {
+                    if ((bool) ($context['cached'] ?? false)) {
                         $msg .= sprintf(_MD_DEBUGBAR_CACHED, (int) ($context['cachetime'] ?? 0));
                     } else {
                         $msg .= _MD_DEBUGBAR_NOT_CACHED;
@@ -988,13 +993,13 @@ class DebugbarLogger
                     $name = isset($context['name']) && is_scalar($context['name'])
                         ? (string) $context['name']
                         : '';
-                    $msg = $name ? ($name . ': ' . $message) : $message;
+                    $msg = $name !== '' ? ($name . ': ' . $message) : $message;
 
                     break;
                 case 'queries':
                     $channel = 'Queries';
                     $context['is_query'] = true;
-                    $queryTime = ! empty($context['query_time']) ? (float) $context['query_time'] : 0.0;
+                    $queryTime = is_numeric($context['query_time'] ?? null) ? (float) $context['query_time'] : 0.0;
                     $qt = $queryTime > 0 ? sprintf('%0.6f', $queryTime) : '';
                     $elapsed = microtime(true) - $this->requestStart;
                     if ($elapsed > 0 && $queryTime > 0) {
@@ -1028,7 +1033,7 @@ class DebugbarLogger
                     }
 
                     // Prefix with timing
-                    $msg = ($qt ? $qt . 's - ' : '') . $msg;
+                    $msg = ($qt !== '' ? $qt . 's - ' : '') . $msg;
 
                     // Add duplicate indicator
                     if ($isDuplicate) {

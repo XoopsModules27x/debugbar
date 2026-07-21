@@ -47,7 +47,7 @@ final class Profiler
             $queries = $logger->getQueryLog();
             $budgets = $this->budgets();
             $budgets['nplus1_threshold'] = QueryAnalyzer::normalizeRepeatThreshold((int) ($budgets['nplus1_threshold'] ?? 0));
-            $stats = QueryAnalyzer::analyze($queries, $logger->getSlowQueryThreshold(), (int) $budgets['nplus1_threshold']);
+            $stats = QueryAnalyzer::analyze($queries, $logger->getSlowQueryThreshold(), $budgets['nplus1_threshold']);
             $totalMs = (microtime(true) - $logger->getRequestStart()) * 1000.0;
             $bootMs = $logger->getLifecycleDurationMs('XOOPS Boot');
             $memoryMb = memory_get_peak_usage(true) / 1048576;
@@ -58,11 +58,12 @@ final class Profiler
             $url = $this->path(Request::getString('REQUEST_URI', '/', 'SERVER'));
             $metrics = ['queries' => $stats['count'], 'query_ms' => $stats['total_ms'], 'boot_ms' => $bootMs, 'total_ms' => $totalMs, 'memory_mb' => $memoryMb, 'payload_kb' => $this->payloadKb(), 'worst_repeat' => $stats['worst_repeat']];
             $verdict = BudgetChecker::check($metrics, $budgets);
+            $decodedFlags = BudgetChecker::decodeFlags($verdict['flags']);
             if (is_object($debugbar)) {
                 $debugbar->addCollector(new ConfigCollector([
                     'Request ID' => $this->requestId,
                     'URL' => $url,
-                    'Module' => $module ?: '(none)',
+                    'Module' => $module !== '' ? $module : '(none)',
                     'Fragment' => $this->isFragment() ? 'yes' : 'no',
                     'Total' => sprintf('%.1f ms', $totalMs),
                     'Bootstrap' => sprintf('%.1f ms', $bootMs),
@@ -82,16 +83,16 @@ final class Profiler
                     'User' => isset($GLOBALS['xoopsUser']) && is_object($GLOBALS['xoopsUser']) && method_exists($GLOBALS['xoopsUser'], 'getVar') ? (string) $GLOBALS['xoopsUser']->getVar('uname') : '(anonymous)',
                 ], 'Request details'));
                 $debugbar->addCollector(new ConfigCollector([
-                    'Flags' => implode(', ', BudgetChecker::decodeFlags($verdict['flags'])) ?: 'none',
-                    'Findings' => $verdict['findings'] ?: ['none'],
-                    'N+1 candidates' => $stats['n_plus_one'] ?: ['none'],
+                    'Flags' => $decodedFlags === [] ? 'none' : implode(', ', $decodedFlags),
+                    'Findings' => $verdict['findings'] === [] ? ['none'] : $verdict['findings'],
+                    'N+1 candidates' => $stats['n_plus_one'] === [] ? ['none'] : $stats['n_plus_one'],
                 ], 'Performance'));
             }
             foreach ($verdict['findings'] as $finding) {
                 $logger->log(\Psr\Log\LogLevel::WARNING, $finding, ['channel' => 'messages', 'source' => 'Debugbar performance budget']);
             }
             (new ProfileRepository())->insert(['request_id' => $this->requestId, 'created' => time(), 'url' => $url, 'url_hash' => hash('xxh128', $url), 'dirname' => $module, 'is_fragment' => $this->isFragment(), 'is_admin_side' => str_contains($url, '/admin'), 'total_ms' => $totalMs, 'boot_ms' => $bootMs, 'query_count' => $stats['count'], 'query_ms' => $stats['total_ms'], 'slowest_ms' => $stats['slowest_ms'], 'slowest_fp' => $stats['slowest_fp'], 'n_plus_one' => $stats['worst_repeat'], 'peak_mem_kb' => (int) round(memory_get_peak_usage(true) / 1024), 'payload_bytes' => (int) round($metrics['payload_kb'] * 1024), 'flags' => $verdict['flags']], (int) ($budgets['profiles_retention_days'] ?? 7), (int) ($budgets['profiles_max_rows'] ?? 10000));
-            (new FlightRecorder())->record($this->requestId, ['request_id' => $this->requestId, 'url' => $url, 'module' => $module, 'metrics' => $metrics, 'flags' => BudgetChecker::decodeFlags($verdict['flags']), 'findings' => $verdict['findings'], 'n_plus_one' => $stats['n_plus_one'], 'slow' => $stats['slow']], $verdict['flags'] !== 0, 30);
+            (new FlightRecorder())->record($this->requestId, ['request_id' => $this->requestId, 'url' => $url, 'module' => $module, 'metrics' => $metrics, 'flags' => $decodedFlags, 'findings' => $verdict['findings'], 'n_plus_one' => $stats['n_plus_one'], 'slow' => $stats['slow']], $verdict['flags'] !== 0, 30);
             if (is_object($debugbar) && ! headers_sent()) {
                 header('Server-Timing: xoops;dur=' . round($totalMs, 1) . ', sql;dur=' . round((float) $stats['total_ms'], 1), false);
             }
@@ -133,7 +134,7 @@ final class Profiler
     /** @return array<array-key, mixed> */
     private function safeHeaders(): array
     {
-        $headers = function_exists('getallheaders') ? (array) getallheaders() : [];
+        $headers = function_exists('getallheaders') ? getallheaders() : [];
 
         return $this->sanitizer()->sanitizeHeaders($headers);
     }

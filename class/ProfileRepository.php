@@ -59,7 +59,7 @@ final class ProfileRepository
     {
         try {
             $config = DebugbarCoreConfig::get();
-            if (array_key_exists('profiles_enable', $config) && empty($config['profiles_enable'])) {
+            if (array_key_exists('profiles_enable', $config) && ! (bool) $config['profiles_enable']) {
                 return false;
             }
         } catch (\Throwable) {
@@ -77,8 +77,8 @@ final class ProfileRepository
             $q((string) ($row['url'] ?? '')),
             $q((string) ($row['url_hash'] ?? '')),
             $q((string) ($row['dirname'] ?? '')),
-            (int) ! empty($row['is_fragment']),
-            (int) ! empty($row['is_admin_side']),
+            (int) (bool) ($row['is_fragment'] ?? false),
+            (int) (bool) ($row['is_admin_side'] ?? false),
             (float) ($row['total_ms'] ?? 0),
             (float) ($row['boot_ms'] ?? 0),
             (int) ($row['query_count'] ?? 0),
@@ -92,7 +92,7 @@ final class ProfileRepository
         );
 
         try {
-            $ok = (bool) $db->exec($sql);
+            $ok = $db->exec($sql);
             if ($ok && random_int(1, 25) === 1) {
                 $this->trim($retentionDays, $maxRows);
             }

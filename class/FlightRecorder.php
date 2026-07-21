@@ -16,7 +16,7 @@ final class FlightRecorder
     /** @param array<string, mixed> $payload */
     public function record(string $requestId, array $payload, bool $violation, int $maxFiles = 30): bool
     {
-        if (! preg_match('/^[a-f0-9]{16}$/', $requestId)) {
+        if (preg_match('/^[a-f0-9]{16}$/', $requestId) !== 1) {
             return false;
         }
 
@@ -41,11 +41,12 @@ final class FlightRecorder
     /** @return list<array{file: string, created: int, violation: bool, request_id: string, bytes: int}> */
     public function listRecords(int $limit = 50): array
     {
-        $files = glob($this->directory() . '/*-[vr]-????????????????.json') ?: [];
+        $matches = glob($this->directory() . '/*-[vr]-????????????????.json');
+        $files = $matches !== false ? $matches : [];
         $records = [];
         foreach ($files as $file) {
             $name = basename($file);
-            if (! preg_match('/^(\d{10})-([vr])-([a-f0-9]{16})\.json$/', $name, $m)) {
+            if (preg_match('/^(\d{10})-([vr])-([a-f0-9]{16})\.json$/', $name, $m) !== 1) {
                 continue;
             }
             $records[] = ['file' => $name, 'created' => (int) $m[1], 'violation' => $m[2] === 'v', 'request_id' => $m[3], 'bytes' => (int) filesize($file)];
@@ -59,7 +60,7 @@ final class FlightRecorder
     public function load(string $file): ?array
     {
         $file = basename($file);
-        if (! preg_match('/^\d{10}-[vr]-[a-f0-9]{16}\.json$/', $file)) {
+        if (preg_match('/^\d{10}-[vr]-[a-f0-9]{16}\.json$/', $file) !== 1) {
             return null;
         }
         $path = $this->directory() . '/' . $file;
@@ -73,7 +74,9 @@ final class FlightRecorder
 
     private function directory(): string
     {
-        return $this->directory ?: (defined('XOOPS_VAR_PATH') ? XOOPS_VAR_PATH . '/debugbar' : XOOPS_ROOT_PATH . '/cache/debugbar');
+        return $this->directory !== null && $this->directory !== ''
+            ? $this->directory
+            : (defined('XOOPS_VAR_PATH') ? XOOPS_VAR_PATH . '/debugbar' : XOOPS_ROOT_PATH . '/cache/debugbar');
     }
 
     private function prune(int $maxFiles): void
@@ -82,9 +85,28 @@ final class FlightRecorder
         if (count($records) <= $maxFiles) {
             return;
         }
-        usort($records, static fn (array $a, array $b): int => ($a['violation'] <=> $b['violation']) ?: ($a['created'] <=> $b['created']));
+        usort($records, static function (array $a, array $b): int {
+            $violationOrder = $a['violation'] <=> $b['violation'];
+
+            return $violationOrder !== 0 ? $violationOrder : ($a['created'] <=> $b['created']);
+        });
         foreach (array_slice($records, 0, count($records) - max(1, $maxFiles)) as $record) {
-            @unlink($this->directory() . '/' . $record['file']);
+            $this->removeFile($this->directory() . '/' . $record['file']);
+        }
+    }
+
+    private function removeFile(string $path): void
+    {
+        if (! is_file($path)) {
+            return;
+        }
+
+        set_error_handler(static fn (): bool => true);
+
+        try {
+            unlink($path);
+        } finally {
+            restore_error_handler();
         }
     }
 }

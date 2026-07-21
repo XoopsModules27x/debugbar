@@ -128,7 +128,7 @@ function _debugbar_copy_assets()
         }
     }
 
-    if (! $srcDir) {
+    if ($srcDir === false) {
         $checkedDirs = [];
         foreach ($vendorPaths as $path) {
             $checkedDirs[] = basename(dirname($path, 4)) . '/…/' . basename($path);
@@ -306,7 +306,7 @@ function _debugbar_recursive_copy($src, $dest)
     }
 
     $dir = opendir($src);
-    if (! $dir) {
+    if ($dir === false) {
         return false;
     }
 

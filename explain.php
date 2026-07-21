@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-if (!defined('XOOPS_ROOT_PATH')) {
+if (! defined('XOOPS_ROOT_PATH')) {
     // Bootstrap from the XOOPS root so common.php does not treat this JSON
     // endpoint as the module's front controller and redirect anonymous users
     // before the endpoint can return its own JSON 403 response.
@@ -26,7 +26,7 @@ if (isset($GLOBALS['xoopsLogger']) && $GLOBALS['xoopsLogger'] instanceof \XoopsL
 
 header('Content-Type: application/json; charset=utf-8');
 
-if (empty($GLOBALS['xoopsUserIsAdmin'])) {
+if (! (bool) ($GLOBALS['xoopsUserIsAdmin'] ?? false)) {
     http_response_code(403);
     echo json_encode(['error' => 'Administrator access required']);
     exit;
@@ -39,7 +39,7 @@ $signedTokenValid = false;
 if (class_exists('XoopsModules\\Debugbar\\DebugbarLogger')) {
     $signedTokenValid = \XoopsModules\Debugbar\DebugbarLogger::getInstance()->isValidExplainToken($token);
 }
-if (!$xoopsTokenValid && !$signedTokenValid) {
+if (! $xoopsTokenValid && ! $signedTokenValid) {
     http_response_code(403);
     echo json_encode(['error' => 'Invalid security token']);
     exit;
@@ -52,7 +52,7 @@ $sql = trim($sql);
 // classifier identifies the top-level statement after all CTE definitions;
 // quoted keywords and nested SELECTs cannot disguise a writable statement.
 if ($sql === '' || strlen($sql) > 100000
-    || !\XoopsModules\Debugbar\Analysis\SqlStatementClassifier::isReadOnlySelect($sql)) {
+    || ! \XoopsModules\Debugbar\Analysis\SqlStatementClassifier::isReadOnlySelect($sql)) {
     http_response_code(400);
     echo json_encode(['error' => 'Only a single read-only SELECT or WITH ... SELECT query can be explained']);
     exit;
@@ -64,7 +64,7 @@ $explainSql = 'EXPLAIN ' . $sql;
 
 try {
     $result = $xoopsDB->query($explainSql);
-    if (!$xoopsDB->isResultSet($result) || !($result instanceof \mysqli_result)) {
+    if (! $xoopsDB->isResultSet($result) || ! ($result instanceof \mysqli_result)) {
         throw new \RuntimeException('The database did not return an EXPLAIN result set');
     }
 

@@ -123,7 +123,12 @@ final class ExplainSecretStore
         }
     }
 
-    /** @phpstan-impure */
+    /**
+     * @template TResult
+     * @param callable(): TResult $operation
+     * @return TResult
+     * @phpstan-impure
+     */
     private function withoutWarnings(callable $operation): mixed
     {
         set_error_handler(static fn (): bool => true);
