@@ -16,12 +16,13 @@ final class FlightRecorder
     /** @param array<string, mixed> $payload */
     public function record(string $requestId, array $payload, bool $violation, int $maxFiles = 30): bool
     {
-        if (!preg_match('/^[a-f0-9]{16}$/', $requestId)) {
+        if (! preg_match('/^[a-f0-9]{16}$/', $requestId)) {
             return false;
         }
+
         try {
             $dir = $this->directory();
-            if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
+            if (! is_dir($dir) && ! mkdir($dir, 0755, true) && ! is_dir($dir)) {
                 return false;
             }
             $file = sprintf('%s/%010d-%s-%s.json', $dir, time(), $violation ? 'v' : 'r', $requestId);
@@ -30,6 +31,7 @@ final class FlightRecorder
                 return false;
             }
             $this->prune($maxFiles);
+
             return true;
         } catch (\Throwable) {
             return false;
@@ -43,12 +45,13 @@ final class FlightRecorder
         $records = [];
         foreach ($files as $file) {
             $name = basename($file);
-            if (!preg_match('/^(\d{10})-([vr])-([a-f0-9]{16})\.json$/', $name, $m)) {
+            if (! preg_match('/^(\d{10})-([vr])-([a-f0-9]{16})\.json$/', $name, $m)) {
                 continue;
             }
             $records[] = ['file' => $name, 'created' => (int) $m[1], 'violation' => $m[2] === 'v', 'request_id' => $m[3], 'bytes' => (int) filesize($file)];
         }
-        usort($records, static fn(array $a, array $b): int => $b['created'] <=> $a['created']);
+        usort($records, static fn (array $a, array $b): int => $b['created'] <=> $a['created']);
+
         return array_slice($records, 0, max(1, $limit));
     }
 
@@ -56,14 +59,15 @@ final class FlightRecorder
     public function load(string $file): ?array
     {
         $file = basename($file);
-        if (!preg_match('/^\d{10}-[vr]-[a-f0-9]{16}\.json$/', $file)) {
+        if (! preg_match('/^\d{10}-[vr]-[a-f0-9]{16}\.json$/', $file)) {
             return null;
         }
         $path = $this->directory() . '/' . $file;
-        if (!is_file($path)) {
+        if (! is_file($path)) {
             return null;
         }
         $data = json_decode((string) file_get_contents($path), true);
+
         return is_array($data) ? $data : null;
     }
 
@@ -78,7 +82,7 @@ final class FlightRecorder
         if (count($records) <= $maxFiles) {
             return;
         }
-        usort($records, static fn(array $a, array $b): int => ($a['violation'] <=> $b['violation']) ?: ($a['created'] <=> $b['created']));
+        usort($records, static fn (array $a, array $b): int => ($a['violation'] <=> $b['violation']) ?: ($a['created'] <=> $b['created']));
         foreach (array_slice($records, 0, count($records) - max(1, $maxFiles)) as $record) {
             @unlink($this->directory() . '/' . $record['file']);
         }

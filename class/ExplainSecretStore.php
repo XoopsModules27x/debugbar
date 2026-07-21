@@ -22,12 +22,12 @@ final class ExplainSecretStore
     public function load(): ?string
     {
         $path = $this->path();
-        if ($path === '' || is_link($this->directory) || is_link($path) || !is_file($path) || !is_readable($path)) {
+        if ($path === '' || is_link($this->directory) || is_link($path) || ! is_file($path) || ! is_readable($path)) {
             return null;
         }
 
         $secret = $this->withoutWarnings(fn () => file_get_contents($path));
-        if (!is_string($secret)) {
+        if (! is_string($secret)) {
             return null;
         }
         $secret = trim($secret);
@@ -44,28 +44,29 @@ final class ExplainSecretStore
             if ($this->directory === '' || is_link($this->directory) || is_link($this->path())) {
                 return false;
             }
-            if (file_exists($this->path()) && !is_file($this->path())) {
+            if (file_exists($this->path()) && ! is_file($this->path())) {
                 return false;
             }
-            if (!is_dir($this->directory) && !$this->withoutWarnings(fn (): bool => mkdir($this->directory, 0700, true)) && !is_dir($this->directory)) {
+            if (! is_dir($this->directory) && ! $this->withoutWarnings(fn (): bool => mkdir($this->directory, 0700, true)) && ! is_dir($this->directory)) {
                 return false;
             }
-            if (!is_writable($this->directory)) {
+            if (! is_writable($this->directory)) {
                 return false;
             }
 
             $temporary = $this->directory . '/.debugbar-explain-' . bin2hex(random_bytes(8)) . '.tmp';
             $handle = $this->withoutWarnings(fn () => fopen($temporary, 'xb'));
-            if (!is_resource($handle)) {
+            if (! is_resource($handle)) {
                 return false;
             }
 
             $contents = bin2hex(random_bytes(32)) . PHP_EOL;
             $offset = 0;
+
             try {
                 while ($offset < strlen($contents)) {
                     $bytes = $this->withoutWarnings(fn () => fwrite($handle, substr($contents, $offset)));
-                    if (!is_int($bytes) || $bytes < 1) {
+                    if (! is_int($bytes) || $bytes < 1) {
                         break;
                     }
                     $offset += $bytes;
@@ -75,14 +76,14 @@ final class ExplainSecretStore
             } finally {
                 fclose($handle);
             }
-            if (!$written) {
+            if (! $written) {
                 $this->removeTemporary($temporary);
 
                 return false;
             }
             $this->withoutWarnings(fn (): bool => chmod($temporary, 0600));
 
-            if (!$this->withoutWarnings(fn (): bool => rename($temporary, $this->path()))) {
+            if (! $this->withoutWarnings(fn (): bool => rename($temporary, $this->path()))) {
                 $this->removeTemporary($temporary);
 
                 return $this->load() !== null;
@@ -100,7 +101,7 @@ final class ExplainSecretStore
         if ($path === '' || is_link($this->directory) || is_link($path)) {
             return 'unsafe';
         }
-        if (file_exists($path) && !is_file($path)) {
+        if (file_exists($path) && ! is_file($path)) {
             return 'unsafe';
         }
         if (is_file($path)) {
@@ -126,6 +127,7 @@ final class ExplainSecretStore
     private function withoutWarnings(callable $operation): mixed
     {
         set_error_handler(static fn (): bool => true);
+
         try {
             return $operation();
         } finally {

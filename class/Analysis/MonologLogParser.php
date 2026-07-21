@@ -19,6 +19,7 @@ final class MonologLogParser
             $entry = $this->parseLine($line);
             $entries[] = $entry;
         }
+
         return $entries;
     }
 
@@ -36,9 +37,10 @@ final class MonologLogParser
         }
         $context = json_decode($matches[5], true);
         $extra = json_decode($matches[6], true);
-        if (!is_array($context) || !is_array($extra)) {
+        if (! is_array($context) || ! is_array($extra)) {
             return $fallback;
         }
+
         return [
             'parsed' => true,
             'raw' => $line,

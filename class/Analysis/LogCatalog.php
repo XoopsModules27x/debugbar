@@ -21,7 +21,7 @@ final class LogCatalog
         if ($directory !== '' && is_dir($directory)) {
             foreach (glob($directory . '/xoops*.log') ?: [] as $path) {
                 $name = basename($path);
-                if (!$this->isMonologName($name) || !is_file($path)) {
+                if (! $this->isMonologName($name) || ! is_file($path)) {
                     continue;
                 }
                 $files[] = ['source' => 'monolog', 'file' => $name, 'modified' => (int) filemtime($path), 'size' => (int) filesize($path)];
@@ -31,6 +31,7 @@ final class LogCatalog
             $files[] = ['source' => 'legacy', 'file' => 'legacy', 'modified' => (int) filemtime($this->legacyFile), 'size' => (int) filesize($this->legacyFile)];
         }
         usort($files, static fn (array $a, array $b): int => $b['modified'] <=> $a['modified']);
+
         return $files;
     }
 
@@ -46,11 +47,13 @@ final class LogCatalog
         if ($handle === false) {
             return null;
         }
+
         try {
             if ($size > $length) {
                 fseek($handle, -$length, SEEK_END);
             }
             $contents = fread($handle, $length);
+
             return $contents === false ? null : $contents;
         } finally {
             fclose($handle);
@@ -65,7 +68,7 @@ final class LogCatalog
         if ($file !== basename($file)) {
             return null;
         }
-        if (!$this->isMonologName($file)) {
+        if (! $this->isMonologName($file)) {
             return null;
         }
         if ($this->monologDirectory === '') {
@@ -73,9 +76,10 @@ final class LogCatalog
         }
         $directory = realpath($this->monologDirectory);
         $path = realpath(rtrim($this->monologDirectory, '/\\') . '/' . $file);
-        if ($directory === false || $path === false || !str_starts_with($path, $directory . DIRECTORY_SEPARATOR)) {
+        if ($directory === false || $path === false || ! str_starts_with($path, $directory . DIRECTORY_SEPARATOR)) {
             return null;
         }
+
         return $path;
     }
 

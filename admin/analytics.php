@@ -17,9 +17,9 @@ $xdebug = XdebugStatus::read();
 $cachegrindCatalog = new CachegrindCatalog($xdebug['output_dir']);
 $action = Request::getCmd('action', '', 'POST');
 if ($action === 'purge_cachegrind') {
-    if (!isset($GLOBALS['xoopsSecurity'])
-        || !$GLOBALS['xoopsSecurity'] instanceof \XoopsSecurity
-        || !$GLOBALS['xoopsSecurity']->check(true, false, 'DEBUGBAR_CACHEGRIND')) {
+    if (! isset($GLOBALS['xoopsSecurity'])
+        || ! $GLOBALS['xoopsSecurity'] instanceof \XoopsSecurity
+        || ! $GLOBALS['xoopsSecurity']->check(true, false, 'DEBUGBAR_CACHEGRIND')) {
         redirect_header('analytics.php', 3, _AM_DEBUGBAR_AN_CG_BAD_TOKEN);
     }
 
@@ -45,6 +45,7 @@ $renderTable = static function (string $title, array $headers, array $rows) use 
     }
     if ($rows === []) {
         echo '<p>' . $esc(_AM_DEBUGBAR_AN_NODATA) . '</p>';
+
         return;
     }
 
@@ -58,6 +59,7 @@ $renderTable = static function (string $title, array $headers, array $rows) use 
         foreach ($row as $value) {
             if (is_array($value) && isset($value['html'])) {
                 echo '<td style="padding:5px">' . $value['html'] . '</td>';
+
                 continue;
             }
             echo '<td style="padding:5px">' . $esc($value) . '</td>';
@@ -79,11 +81,12 @@ if ($requestedRecord !== '') {
         echo '<pre style="max-height:70vh;overflow:auto;padding:12px;border:1px solid #ccc">' . $esc($json ?: '{}') . '</pre>';
     }
     require_once __DIR__ . '/admin_footer.php';
+
     return;
 }
 
 $days = Request::getInt('days', 7, 'GET');
-if (!in_array($days, [1, 7, 30], true)) {
+if (! in_array($days, [1, 7, 30], true)) {
     $days = 7;
 }
 
@@ -99,7 +102,7 @@ echo ' &mdash; ' . $esc(sprintf(_AM_DEBUGBAR_AN_ROWCOUNT, number_format($reposit
 
 echo '<h2>' . $esc(_AM_DEBUGBAR_AN_OPCACHE) . '</h2>';
 $opcache = function_exists('opcache_get_status') ? opcache_get_status(false) : false;
-if (!is_array($opcache)) {
+if (! is_array($opcache)) {
     echo '<p>' . $esc(_AM_DEBUGBAR_AN_OPCACHE_UNAVAILABLE) . '</p>';
 } else {
     $hits = (int) ($opcache['opcache_statistics']['hits'] ?? 0);

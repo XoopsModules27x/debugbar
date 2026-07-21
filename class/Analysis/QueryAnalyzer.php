@@ -43,18 +43,18 @@ final class QueryAnalyzer
             $fingerprint = self::fingerprint($sql);
             $fingerprints[$fingerprint] = ($fingerprints[$fingerprint] ?? 0) + 1;
             $duplicates[$fingerprint] = ['sql' => $sql, 'count' => $fingerprints[$fingerprint]];
-            if (!empty($query['error'])) {
+            if (! empty($query['error'])) {
                 $errors++;
             }
             if ($ms >= $slowThreshold * 1000.0) {
                 $slow[] = ['sql' => $sql, 'ms' => $ms];
             }
         }
-        uasort($duplicates, static fn(array $a, array $b): int => $b['count'] <=> $a['count']);
-        usort($slow, static fn(array $a, array $b): int => $b['ms'] <=> $a['ms']);
+        uasort($duplicates, static fn (array $a, array $b): int => $b['count'] <=> $a['count']);
+        usort($slow, static fn (array $a, array $b): int => $b['ms'] <=> $a['ms']);
         $nPlusOne = $repeatThreshold === 0
             ? []
-            : array_filter($duplicates, static fn(array $row): bool => $row['count'] >= $repeatThreshold);
+            : array_filter($duplicates, static fn (array $row): bool => $row['count'] >= $repeatThreshold);
 
         return [
             'count' => $count,
@@ -63,7 +63,7 @@ final class QueryAnalyzer
             'slowest_ms' => $slow[0]['ms'] ?? 0.0,
             'slowest_fp' => isset($slow[0]) ? self::fingerprint($slow[0]['sql']) : '',
             'worst_repeat' => empty($nPlusOne) ? 0 : max(array_column($nPlusOne, 'count')),
-            'duplicates' => array_values(array_filter($duplicates, static fn(array $row): bool => $row['count'] > 1)),
+            'duplicates' => array_values(array_filter($duplicates, static fn (array $row): bool => $row['count'] > 1)),
             'n_plus_one' => array_values($nPlusOne),
             'slow' => $slow,
         ];

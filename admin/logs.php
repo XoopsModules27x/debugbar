@@ -29,7 +29,7 @@ if ($requested !== '') {
         echo '<p>' . $esc(_AM_DEBUGBAR_LOGS_MISSING) . '</p>';
     } else {
         $isMonolog = $requested !== 'legacy';
-        if (!$isMonolog) {
+        if (! $isMonolog) {
             echo '<p>' . $esc(_AM_DEBUGBAR_LOGS_TAIL_NOTE) . '</p>';
             echo '<pre class="debugbar-log-raw">' . $esc($contents) . '</pre>';
         } else {
@@ -44,12 +44,14 @@ if ($requested !== '') {
                 . '<th>' . $esc(_AM_DEBUGBAR_LOGS_LOCATION) . '</th><th>' . $esc(_AM_DEBUGBAR_LOGS_DETAILS) . '</th>'
                 . '</tr></thead><tbody>';
             foreach ($entries as $entry) {
-                if (!$entry['parsed']) {
+                if (! $entry['parsed']) {
                     echo '<tr><td colspan="6"><pre class="debugbar-log-raw">' . $esc($entry['raw']) . '</pre></td></tr>';
+
                     continue;
                 }
                 $level = in_array($entry['level'], ['debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency'], true)
                     ? $entry['level'] : 'debug';
+
                 try {
                     $timestamp = (new DateTimeImmutable($entry['timestamp']))
                         ->setTimezone(new DateTimeZone(date_default_timezone_get()))
@@ -91,6 +93,7 @@ if ($requested !== '') {
         }
     }
     require_once __DIR__ . '/admin_footer.php';
+
     return;
 }
 
