@@ -29,7 +29,7 @@ final class DebugbarLoggerTest extends TestCase
         if (! defined('XOOPS_ROOT_PATH')) {
             define('XOOPS_ROOT_PATH', dirname(__DIR__, 3));
         }
-        if (! class_exists(\XoopsLogger::class)) {
+        if (! class_exists(\XoopsLogger::class, false)) {
             class_alias(XoopsLoggerStub::class, \XoopsLogger::class);
         }
 

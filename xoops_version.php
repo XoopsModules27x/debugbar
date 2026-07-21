@@ -16,7 +16,7 @@ defined('XOOPS_ROOT_PATH') || exit('Restricted access');
 $modversion = [];
 
 // --- Module Info ---
-$modversion['version']      = '1.3.1';
+$modversion['version']      = '1.3.2';
 $modversion['release_date'] = '2026/07/21';
 $modversion['name']         = _MI_DEBUGBAR_NAME;
 $modversion['description']  = _MI_DEBUGBAR_DSC;

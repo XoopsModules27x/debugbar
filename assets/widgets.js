@@ -680,7 +680,7 @@
                     contextTable.innerHTML = '<tr><th colspan="2">Context</th></tr>';
 
                     const contextJsonData = value.context_json || {};
-                    for (const key in value.context) {
+                    for (const key of Object.keys(value.context)) {
                         if (typeof value.context[key] !== 'function') {
                             const tr = document.createElement('tr');
                             const td1 = document.createElement('td');
