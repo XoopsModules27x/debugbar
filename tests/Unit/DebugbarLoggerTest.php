@@ -20,6 +20,7 @@ final class XoopsLoggerStub
 
     public function addLogger(object $logger): void
     {
+        // Intentionally ignored: this test double only satisfies logger registration.
     }
 }
 
