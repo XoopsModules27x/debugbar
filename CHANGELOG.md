@@ -8,12 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
-- Pointed the Logs viewer at the XOOPS 2.7.3 core debug log (`xoops_data/logs/debug.log`). It still pointed at the pre-2.7.3 `/log/log.txt`, which no longer exists, so the plain-text log was simply never listed.
+- Pointed the Logs viewer at the XOOPS 2.7.3 core debug log (`logs/debug.log` under the configured XOOPS data directory). It still pointed at the pre-2.7.3 `/log/log.txt`, which no longer exists, so the plain-text log was simply never listed.
 
 ### Changed
 
 - Renamed the plain-text log source from `legacy` to `core`, so the Source column describes the current log rather than a retired one.
-- Rendered analytics and log timestamps through the site's configured date format and timezone instead of a hardcoded `Y-m-d H:i:s`.
+- Rendered analytics and log timestamps through `formatTimestamp()`, so they honour the site's timezone rather than the server's. The sortable `Y-m-d H:i:s` layout is kept deliberately: these are data tables, not prose.
 
 ## [1.3.2] - 2026-07-21
 

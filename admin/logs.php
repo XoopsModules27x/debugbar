@@ -14,11 +14,10 @@ $adminObject->displayNavigation(basename(__FILE__));
 $varPath = defined('XOOPS_VAR_PATH') && XOOPS_VAR_PATH !== ''
     ? XOOPS_VAR_PATH
     : XOOPS_ROOT_PATH . '/xoops_data';
-// The second slot is the plain-text log shown verbatim rather than parsed as Monolog.
-// It used to be the pre-2.7.3 /log/log.txt; XOOPS 2.7.3 replaced that with the core file
-// logger. The name is fixed by convention -- debug.log, in xoops_data/logs -- so the
-// viewer needs no configuration to find it.
-$catalog = new LogCatalog($varPath . '/logs', $varPath . '/logs/debug.log');
+// Second slot: shown verbatim rather than parsed as Monolog. It held the pre-2.7.3
+// /log/log.txt until the core file logger replaced it. Location and key come from
+// LogCatalog so this file cannot drift from the catalog.
+$catalog = new LogCatalog($varPath . '/logs', $varPath . '/logs/' . LogCatalog::CORE_LOG_FILENAME);
 $esc = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 $requested = Request::getString('file', '', 'GET');
 $cssFile = XOOPS_ROOT_PATH . '/modules/debugbar/assets-custom/admin-logs.css';
@@ -32,7 +31,7 @@ if ($requested !== '') {
     if ($contents === null) {
         echo '<p>' . $esc(_AM_DEBUGBAR_LOGS_MISSING) . '</p>';
     } else {
-        $isMonolog = $requested !== 'core';
+        $isMonolog = $requested !== LogCatalog::SOURCE_CORE;
         if (! $isMonolog) {
             echo '<p>' . $esc(_AM_DEBUGBAR_LOGS_TAIL_NOTE) . '</p>';
             echo '<pre class="debugbar-log-raw">' . $esc($contents) . '</pre>';

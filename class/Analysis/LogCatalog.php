@@ -6,6 +6,20 @@ namespace XoopsModules\Debugbar\Analysis;
 
 final class LogCatalog
 {
+    /**
+     * Key for the plain-text XOOPS core debug log, used as both the `source` label and
+     * the `file` selector. Declared once so the catalog, the resolver and the viewer
+     * cannot drift apart.
+     */
+    public const SOURCE_CORE = 'core';
+
+    /**
+     * Filename the XOOPS 2.7.3 core file logger writes, relative to the logs directory.
+     * Fixed by convention rather than configurable: the core log has one standard
+     * location, so the viewer needs no setup to find it.
+     */
+    public const CORE_LOG_FILENAME = 'debug.log';
+
     public function __construct(
         private readonly string $monologDirectory,
         private readonly ?string $coreLogFile = null,
@@ -29,7 +43,7 @@ final class LogCatalog
             }
         }
         if ($this->coreLogFile !== null && is_file($this->coreLogFile)) {
-            $files[] = ['source' => 'core', 'file' => 'core', 'modified' => (int) filemtime($this->coreLogFile), 'size' => (int) filesize($this->coreLogFile)];
+            $files[] = ['source' => self::SOURCE_CORE, 'file' => self::SOURCE_CORE, 'modified' => (int) filemtime($this->coreLogFile), 'size' => (int) filesize($this->coreLogFile)];
         }
         usort($files, static fn (array $a, array $b): int => $b['modified'] <=> $a['modified']);
 
@@ -63,7 +77,7 @@ final class LogCatalog
 
     private function resolve(string $file): ?string
     {
-        if ($file === 'core') {
+        if ($file === self::SOURCE_CORE) {
             return $this->coreLogFile !== null && is_file($this->coreLogFile) ? $this->coreLogFile : null;
         }
         if ($file !== basename($file)) {
