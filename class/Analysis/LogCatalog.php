@@ -8,7 +8,7 @@ final class LogCatalog
 {
     public function __construct(
         private readonly string $monologDirectory,
-        private readonly ?string $legacyFile = null,
+        private readonly ?string $coreLogFile = null,
         private readonly int $maximumBytes = 262144
     ) {
     }
@@ -28,8 +28,8 @@ final class LogCatalog
                 $files[] = ['source' => 'monolog', 'file' => $name, 'modified' => (int) filemtime($path), 'size' => (int) filesize($path)];
             }
         }
-        if ($this->legacyFile !== null && is_file($this->legacyFile)) {
-            $files[] = ['source' => 'legacy', 'file' => 'legacy', 'modified' => (int) filemtime($this->legacyFile), 'size' => (int) filesize($this->legacyFile)];
+        if ($this->coreLogFile !== null && is_file($this->coreLogFile)) {
+            $files[] = ['source' => 'core', 'file' => 'core', 'modified' => (int) filemtime($this->coreLogFile), 'size' => (int) filesize($this->coreLogFile)];
         }
         usort($files, static fn (array $a, array $b): int => $b['modified'] <=> $a['modified']);
 
@@ -63,8 +63,8 @@ final class LogCatalog
 
     private function resolve(string $file): ?string
     {
-        if ($file === 'legacy') {
-            return $this->legacyFile !== null && is_file($this->legacyFile) ? $this->legacyFile : null;
+        if ($file === 'core') {
+            return $this->coreLogFile !== null && is_file($this->coreLogFile) ? $this->coreLogFile : null;
         }
         if ($file !== basename($file)) {
             return null;
