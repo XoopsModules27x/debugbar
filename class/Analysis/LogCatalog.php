@@ -47,8 +47,12 @@ final class LogCatalog
                 $files[] = ['source' => 'monolog', 'file' => $name, 'modified' => (int) filemtime($path), 'size' => (int) filesize($path)];
             }
         }
-        if ($this->coreLogFile !== null && is_file($this->coreLogFile)) {
-            $files[] = ['source' => self::SOURCE_CORE, 'file' => self::SOURCE_CORE, 'modified' => (int) filemtime($this->coreLogFile), 'size' => (int) filesize($this->coreLogFile)];
+        // Resolved, not merely is_file()'d: listing an uncontained path would publish the
+        // size and mtime of whatever a symlink points at, even though reading it is
+        // refused. Metadata leaks are still leaks.
+        $coreLog = $this->containedCoreLog();
+        if ($coreLog !== null) {
+            $files[] = ['source' => self::SOURCE_CORE, 'file' => self::SOURCE_CORE, 'modified' => (int) filemtime($coreLog), 'size' => (int) filesize($coreLog)];
         }
         usort($files, static fn (array $a, array $b): int => $b['modified'] <=> $a['modified']);
 
@@ -80,27 +84,38 @@ final class LogCatalog
         }
     }
 
+    /**
+     * The core log path, but only if it really sits inside the log directory.
+     *
+     * One place, used by BOTH listFiles() and resolve(): containment applied on the read
+     * path alone still let the listing publish the size and mtime of whatever a planted
+     * symlink pointed at. The path is built by the caller rather than taken from the
+     * request, so none of this is reachable from a browser -- but the core file logger
+     * refuses to WRITE through a symlink for the same reason, and the reader should not
+     * be more trusting than the writer.
+     *
+     * @return string|null resolved real path, or null when absent or out of bounds
+     */
+    private function containedCoreLog(): ?string
+    {
+        if ($this->coreLogFile === null || ! is_file($this->coreLogFile)) {
+            return null;
+        }
+        $real = realpath($this->coreLogFile);
+        if ($real === false) {
+            return null;
+        }
+        $directory = $this->monologDirectory === '' ? false : realpath($this->monologDirectory);
+
+        return $directory !== false && str_starts_with($real, $directory . DIRECTORY_SEPARATOR)
+            ? $real
+            : null;
+    }
+
     private function resolve(string $file): ?string
     {
         if ($file === self::SOURCE_CORE) {
-            if ($this->coreLogFile === null || ! is_file($this->coreLogFile)) {
-                return null;
-            }
-            // Held to the same containment as the Monolog branch below. The path is built
-            // by the caller rather than taken from the request, so this is not reachable
-            // from the browser -- but a symlink planted at logs/debug.log would otherwise
-            // let a read escape the log directory, and the core file logger refuses to
-            // WRITE through a symlink for exactly that reason. The reader should not be
-            // more trusting than the writer.
-            $real = realpath($this->coreLogFile);
-            if ($real === false) {
-                return null;
-            }
-            $directory = $this->monologDirectory === '' ? false : realpath($this->monologDirectory);
-
-            return $directory !== false && str_starts_with($real, $directory . DIRECTORY_SEPARATOR)
-                ? $real
-                : null;
+            return $this->containedCoreLog();
         }
         if ($file !== basename($file)) {
             return null;
