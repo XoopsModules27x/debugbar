@@ -20,6 +20,8 @@ namespace {
 
     function redirect_header(string $url, int $time = 3, string $message = ''): void {}
 
+    function formatTimestamp(mixed $time, string $format = 'l', string $timeoffset = ''): string {}
+
     function xoops_cp_header(): void {}
 
     function xoops_cp_footer(): void {}

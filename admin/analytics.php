@@ -137,7 +137,7 @@ $renderTable(_AM_DEBUGBAR_AN_MODULES, [_AM_DEBUGBAR_AN_MODULE, _AM_DEBUGBAR_AN_H
 
 $violationRows = [];
 foreach ($repository->recentViolations() as $row) {
-    $violationRows[] = [date('Y-m-d H:i:s', (int) $row['created']), $row['url'], $row['dirname'] !== '' ? $row['dirname'] : '—', $number($row['total_ms']), $row['query_count'], implode(', ', BudgetChecker::decodeFlags((int) $row['flags']))];
+    $violationRows[] = [formatTimestamp((int) $row['created'], 'mysql'), $row['url'], $row['dirname'] !== '' ? $row['dirname'] : '—', $number($row['total_ms']), $row['query_count'], implode(', ', BudgetChecker::decodeFlags((int) $row['flags']))];
 }
 $renderTable(_AM_DEBUGBAR_AN_VIOLATIONS_FEED, [_AM_DEBUGBAR_AN_WHEN, _AM_DEBUGBAR_AN_URL, _AM_DEBUGBAR_AN_MODULE, _AM_DEBUGBAR_AN_TOTAL_MS, _AM_DEBUGBAR_AN_QUERIES, _AM_DEBUGBAR_AN_FLAGS], $violationRows);
 
@@ -145,7 +145,7 @@ $flightRows = [];
 foreach ($recorder->listRecords() as $record) {
     $link = 'analytics.php?' . http_build_query(['record' => $record['file']], '', '&amp;', PHP_QUERY_RFC3986);
     $flightRows[] = [
-        date('Y-m-d H:i:s', $record['created']),
+        formatTimestamp($record['created'], 'mysql'),
         $record['violation'] ? _AM_DEBUGBAR_AN_VIOLATION : _AM_DEBUGBAR_AN_OK,
         $record['request_id'],
         $number($record['bytes'] / 1024) . ' KB',
@@ -164,7 +164,7 @@ echo '<p><strong>' . $esc(_AM_DEBUGBAR_AN_CG_EXTENSION) . ':</strong> ' . $esc($
 
 $cachegrindRows = [];
 foreach ($cachegrindCatalog->listFiles() as $file) {
-    $cachegrindRows[] = [date('Y-m-d H:i:s', $file['modified']), $file['file'], $number($file['size'] / 1024) . ' KB'];
+    $cachegrindRows[] = [formatTimestamp($file['modified'], 'mysql'), $file['file'], $number($file['size'] / 1024) . ' KB'];
 }
 $renderTable('', [_AM_DEBUGBAR_AN_WHEN, _AM_DEBUGBAR_AN_CG_FILE, _AM_DEBUGBAR_AN_SIZE], $cachegrindRows);
 $purgeConfirmation = json_encode(_AM_DEBUGBAR_AN_CG_PURGE_CONFIRM, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
