@@ -13,7 +13,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - Renamed the plain-text log source from `legacy` to `core`, so the Source column describes the current log rather than a retired one.
-- Rendered analytics and log timestamps through `formatTimestamp()`, so they honour the site's timezone rather than the server's. The sortable `Y-m-d H:i:s` layout is kept deliberately: these are data tables, not prose.
+- Rendered analytics and log timestamps through `formatTimestamp()`, so they honour the site's configured timezone rather than the server's. XOOPS applies the site default here rather than each administrator's own offset, so the column reads the same for everyone. The sortable `Y-m-d H:i:s` layout is kept deliberately — these are data tables, not prose — and the trailing timezone abbreviation is dropped, since it would name the server's zone rather than the one the value was converted to.
+- Held the core log to the same directory containment as the Monolog files when reading. The path is built by the caller and never taken from the request, but the core file logger refuses to write through a symlink, and the reader should not be more trusting than the writer.
 
 ## [1.3.2] - 2026-07-21
 

@@ -17,6 +17,11 @@ final class LogCatalog
      * Filename the XOOPS 2.7.3 core file logger writes, relative to the logs directory.
      * Fixed by convention rather than configurable: the core log has one standard
      * location, so the viewer needs no setup to find it.
+     *
+     * debug.php does technically accept another plain "*.log" name. A site that renames
+     * its log will simply not see it listed here -- and one that renames it to
+     * "xoops.log" would see it listed as a MONOLOG file and parsed as JSON lines, because
+     * that name matches isMonologName(). Both are reasons to leave the name alone.
      */
     public const CORE_LOG_FILENAME = 'debug.log';
 
@@ -78,7 +83,24 @@ final class LogCatalog
     private function resolve(string $file): ?string
     {
         if ($file === self::SOURCE_CORE) {
-            return $this->coreLogFile !== null && is_file($this->coreLogFile) ? $this->coreLogFile : null;
+            if ($this->coreLogFile === null || ! is_file($this->coreLogFile)) {
+                return null;
+            }
+            // Held to the same containment as the Monolog branch below. The path is built
+            // by the caller rather than taken from the request, so this is not reachable
+            // from the browser -- but a symlink planted at logs/debug.log would otherwise
+            // let a read escape the log directory, and the core file logger refuses to
+            // WRITE through a symlink for exactly that reason. The reader should not be
+            // more trusting than the writer.
+            $real = realpath($this->coreLogFile);
+            if ($real === false) {
+                return null;
+            }
+            $directory = $this->monologDirectory === '' ? false : realpath($this->monologDirectory);
+
+            return $directory !== false && str_starts_with($real, $directory . DIRECTORY_SEPARATOR)
+                ? $real
+                : null;
         }
         if ($file !== basename($file)) {
             return null;
