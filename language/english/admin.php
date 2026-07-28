@@ -178,3 +178,58 @@ declare(strict_types=1);
 \define('_AM_DEBUGBAR_DIAG_THEME_BLOCKS', 'Theme block renderer');
 \define('_AM_DEBUGBAR_DIAG_FRONT_ENTRY', 'Front theme entry file');
 \define('_AM_DEBUGBAR_DIAG_ADMIN_ENTRY', 'Admin theme entry file');
+\define('_AM_DEBUGBAR_DIAG_EXPLAIN_STASH', 'EXPLAIN stash');
+\define('_AM_DEBUGBAR_DIAG_FORBIDDEN', 'You are not allowed to view system diagnostics.');
+
+// Analytics access control / empty states
+\define('_AM_DEBUGBAR_AN_FORBIDDEN', 'You are not allowed to view performance analytics.');
+\define('_AM_DEBUGBAR_AN_NOTABLE', 'The performance analytics table does not exist yet. Update the module to create it.');
+\define('_AM_DEBUGBAR_AN_DELETE', 'Delete');
+
+// OPcache panel
+\define('_AM_DEBUGBAR_AN_OPCACHE_HITRATE', 'Hit rate');
+\define('_AM_DEBUGBAR_AN_OPCACHE_MEM', 'Memory');
+\define('_AM_DEBUGBAR_AN_OPCACHE_SCRIPTS', 'Cached scripts');
+\define('_AM_DEBUGBAR_AN_OPCACHE_RESTARTS', 'Restarts');
+\define('_AM_DEBUGBAR_AN_OPCACHE_OFF', 'OPcache is not available on this server.');
+
+// Field web-vitals (RUM)
+\define('_AM_DEBUGBAR_AN_SAMPLES', 'Samples');
+\define('_AM_DEBUGBAR_AN_LCP', 'LCP (ms)');
+\define('_AM_DEBUGBAR_AN_INP', 'INP (ms)');
+\define('_AM_DEBUGBAR_AN_CLS', 'CLS');
+\define('_AM_DEBUGBAR_AN_SERVER_MS', 'Server ms');
+
+// Cachegrind / Xdebug profile viewer
+\define('_AM_DEBUGBAR_AN_CG_DELETED', 'The Xdebug profile file was deleted.');
+\define('_AM_DEBUGBAR_AN_CG_MISSING', 'The requested Xdebug profile is unavailable.');
+\define('_AM_DEBUGBAR_AN_CG_CREATOR', 'Creator');
+\define('_AM_DEBUGBAR_AN_CG_COMMAND', 'Command');
+\define('_AM_DEBUGBAR_AN_CG_TOTAL', 'Total');
+\define('_AM_DEBUGBAR_AN_CG_PARTIAL', 'partial, recording truncated');
+\define('_AM_DEBUGBAR_AN_CG_TOP_FUNCTIONS', 'Top functions');
+\define('_AM_DEBUGBAR_AN_CG_FUNCTION', 'Function');
+\define('_AM_DEBUGBAR_AN_CG_CALLS', 'Calls');
+\define('_AM_DEBUGBAR_AN_CG_SELF', 'Self');
+\define('_AM_DEBUGBAR_AN_CG_SELF_PCT', 'Self %');
+\define('_AM_DEBUGBAR_AN_CG_INCL', 'Inclusive');
+\define('_AM_DEBUGBAR_AN_CG_RECURSION_NOTE', 'This profile contains recursive calls; self/inclusive totals for recursive functions may be approximate.');
+\define('_AM_DEBUGBAR_AN_CG_SIZE', 'Size (KB)');
+\define('_AM_DEBUGBAR_AN_CG_VIEW', 'View');
+\define('_AM_DEBUGBAR_AN_CG_DIR_UNCONFIGURED', 'Not configured');
+\define('_AM_DEBUGBAR_AN_CG_DIR_MISSING', 'Directory missing');
+\define('_AM_DEBUGBAR_AN_CG_DIR_UNREADABLE', 'Directory unreadable');
+\define('_AM_DEBUGBAR_AN_CG_DIR_OK', 'OK');
+\define('_AM_DEBUGBAR_AN_CG_SHARED_DIR', 'The configured output directory is shared with other applications. Consider using a dedicated directory to avoid mixing profile files.');
+\define('_AM_DEBUGBAR_AN_CG_INI_HINT', 'Xdebug profiling could not be triggered automatically. Add the following to your php.ini to enable it:');
+
+// Ray integration
+\define('_AM_DEBUGBAR_INSTALLED_ACTIVE', 'Installed, active');
+\define('_AM_DEBUGBAR_RAY_CONTROL', 'Ray control');
+\define('_AM_DEBUGBAR_RAY_DSC', 'Controls the Ray preference for this module. The Ray desktop application must also be running to receive data.');
+\define('_AM_DEBUGBAR_RAY_TURN_ON', 'Turn Ray ON');
+\define('_AM_DEBUGBAR_RAY_TURN_OFF', 'Turn Ray OFF');
+\define('_AM_DEBUGBAR_RAY_ENABLED_MSG', 'Ray is now enabled.');
+\define('_AM_DEBUGBAR_RAY_DISABLED_MSG', 'Ray is now disabled.');
+\define('_AM_DEBUGBAR_RAY_FAILED', 'The Ray preference could not be updated.');
+\define('_AM_DEBUGBAR_RAY_BAD_TOKEN', 'The security token expired. Ray was not changed.');

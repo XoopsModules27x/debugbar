@@ -33,6 +33,7 @@ use DebugBar\StandardDebugBar;
 use Psr\Log\LogLevel;
 use Xmf\Request;
 use XoopsModules\Debugbar\Analysis\DiagnosticSanitizer;
+use XoopsModules\Debugbar\Analysis\SqlRedactor;
 
 /**
  * DebugbarLogger — collects XOOPS debug data and renders via PHP DebugBar.
@@ -329,6 +330,11 @@ class DebugbarLogger
         // Add XOOPS custom settings widget (provides settings gear icon, themes, position)
         $xoopsAssetsUrl = $this->moduleUrl() . '/assets';
         $theme->addStylesheet($xoopsAssetsUrl . '/xoops-debugbar-settings.css');
+        // The settings widget is the only toolbar script that needs jQuery. Rather
+        // than bundle a private copy, link the canonical XOOPS jQuery — and only
+        // load it when the theme has not already, so it is never double-loaded.
+        $jqueryUrl = XOOPS_URL . '/browse.php?Frameworks/jquery/jquery.js';
+        $theme->addScript('', [], 'window.jQuery||document.write(\'<script src="' . $jqueryUrl . '"><\/script>\');', 'debugbar-jquery');
         $theme->addScript($xoopsAssetsUrl . '/xoops-debugbar-settings.js');
 
         $this->assetsAdded = true;
@@ -516,10 +522,15 @@ class DebugbarLogger
         return isset($this->lifecycleMeasures[$name]) ? $this->lifecycleMeasures[$name] * 1000.0 : 0.0;
     }
 
-    /** Create the EXPLAIN token while the authenticated request session is open. */
+    /**
+     * Create the EXPLAIN CSRF token while the authenticated request session
+     * is open. Reusable (not single-use): one page load may EXPLAIN several
+     * rows. Validation happens in explain.php via the same standard XOOPS
+     * security-token store — no bespoke signing secret is involved.
+     */
     public function prepareExplainToken(): void
     {
-        if (! $this->activated || ! isset($GLOBALS['xoopsSecurity']) || ! is_object($GLOBALS['xoopsSecurity'])) {
+        if (! $this->activated || ! isset($GLOBALS['xoopsSecurity']) || ! $GLOBALS['xoopsSecurity'] instanceof \XoopsSecurity) {
             return;
         }
 
@@ -530,50 +541,71 @@ class DebugbarLogger
             if (session_status() !== PHP_SESSION_ACTIVE) {
                 session_start();
             }
-            // Use a stateless signed token for this read-only admin action.
-            // XOOPS session tokens can be lost when another bootstrap phase
-            // closes or regenerates the session before footer rendering.
-            $this->explainToken = $this->buildExplainToken();
+            $this->explainToken = $GLOBALS['xoopsSecurity']->createToken(0, 'DEBUGBAR_EXPLAIN');
         } catch (\Throwable $e) {
             $this->explainToken = '';
         }
     }
 
-    public function isValidExplainToken(string $token): bool
+    /**
+     * Persist this request's recorded SQL (hash => statement) so the
+     * on-demand EXPLAIN endpoint can only ever explain queries the server
+     * itself ran. Opt-in (explain_on_demand), bounded, aggressively pruned.
+     *
+     * @return void
+     */
+    private function stashQueriesForExplain(): void
     {
-        if ($token === '') {
-            return false;
-        }
-        $hour = (int) floor(time() / 3600);
-        foreach ([$hour, $hour - 1] as $slot) {
-            $signature = $this->explainSignature($slot);
-            if ($signature !== '' && hash_equals($signature, $token)) {
-                return true;
+        try {
+            if (! class_exists(Helper::class) || ! (bool) (Helper::getInstance()->getConfig('explain_on_demand') ?? false)) {
+                return;
             }
+            if ([] === $this->queryLog) {
+                return;
+            }
+            $requestId = \XoopsModules\Debugbar\Profiler::getInstance()->getRequestId();
+            if (1 !== preg_match('/^[0-9a-f]{8,32}$/i', $requestId)) {
+                return;
+            }
+            $varPath = defined('XOOPS_VAR_PATH') && XOOPS_VAR_PATH !== '' ? XOOPS_VAR_PATH : XOOPS_ROOT_PATH . '/xoops_data';
+            $dir = $varPath . '/caches/debugbar_explain';
+            if (! is_dir($dir) && ! mkdir($dir, 0755, true) && ! is_dir($dir)) {
+                return;
+            }
+            // Opportunistic prune: drop files older than 15 minutes; hard-cap 50 files.
+            $files = glob($dir . '/*.json');
+            $files = is_array($files) ? $files : [];
+            $now = time();
+            foreach ($files as $f) {
+                if ($now - (int) filemtime($f) > 900) {
+                    @unlink($f);
+                }
+            }
+            $files = glob($dir . '/*.json');
+            $files = is_array($files) ? $files : [];
+            if (count($files) >= 50) {
+                usort($files, static fn ($a, $b) => filemtime($a) <=> filemtime($b));
+                foreach (array_slice($files, 0, count($files) - 49) as $f) {
+                    @unlink($f);
+                }
+            }
+            $map = [];
+            foreach (array_slice($this->queryLog, 0, 200) as $entry) {
+                $sql = (string) ($entry['sql'] ?? '');
+                if ('' === $sql) {
+                    continue;
+                }
+                // Key on the hash of the ORIGINAL sql (matches the bar's sql_hash);
+                // store only a redacted, runnable form so no secret is persisted.
+                $map[hash('sha256', $sql)] = SqlRedactor::redact($sql);
+            }
+            if ([] === $map) {
+                return;
+            }
+            @file_put_contents($dir . '/' . strtolower($requestId) . '.json', json_encode($map));
+        } catch (\Throwable $e) {
+            // stash is best-effort; never break rendering
         }
-
-        return false;
-    }
-
-    private function buildExplainToken(): string
-    {
-        return $this->explainSignature((int) floor(time() / 3600));
-    }
-
-    private function explainSignature(int $slot): string
-    {
-        $uid = 0;
-        $user = $GLOBALS['xoopsUser'] ?? null;
-        if ($user instanceof \XoopsUser) {
-            $uid = (int) $user->getVar('uid');
-        }
-        $identity = $uid . '|' . session_id() . '|' . Request::getString('HTTP_USER_AGENT', '', 'SERVER');
-        $secret = (new ExplainSecretStore())->load();
-        if ($secret === null) {
-            return '';
-        }
-
-        return hash_hmac('sha256', $identity . '|' . $slot, $secret);
     }
 
     /** Record an XOOPS cache operation for the Cache collector. */
@@ -924,7 +956,7 @@ class DebugbarLogger
         $this->addRuntimeCollectors();
 
         if (! $this->quietmode) {
-            $isAjax = Request::getHeader('X-Requested-With') === 'XMLHttpRequest';
+            $isAjax = RequestShape::wantsFragment();
             $output = '';
 
             if ($isAjax) {
@@ -935,7 +967,16 @@ class DebugbarLogger
                 // Always render assets inline here for theme-independence.
                 // This works across ALL themes without requiring <{$xoops_module_header}>.
                 $renderer->setIncludeVendors(true);
+
+                $this->stashQueriesForExplain();
+
                 $output = $renderer->renderHead();
+
+                // Bootstrap config bridging server-side settings to the JS widgets
+                // (Copy-to-clipboard secret redaction). Best-effort progressive
+                // enhancement — never break the page if config lookup fails.
+                $copyRedact = (bool) (Helper::getInstance()->getConfig('copy_redact') ?? true);
+                $output .= '<script>window.XoopsDebugbarConfig=' . json_encode(['copyRedact' => $copyRedact], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) . ';</script>' . "\n";
 
                 // Load XOOPS custom settings CSS
                 $xoopsAssetsUrl = $this->moduleUrl() . '/assets';
@@ -945,19 +986,34 @@ class DebugbarLogger
                 // Render debugbar initialization and data
                 $output .= $renderer->render();
 
+                // The settings widget needs jQuery. Link the canonical XOOPS copy,
+                // loading it only when the theme has not already provided it so it
+                // is never double-loaded. Emitted before the settings script.
+                $output .= '<script type="text/javascript">window.jQuery||document.write(\'<script src="'
+                    . XOOPS_URL . '/browse.php?Frameworks/jquery/jquery.js"><\/script>\');</script>' . "\n";
                 // Load the settings widget JS as an external script (cacheable by browser)
                 $output .= '<script type="text/javascript" src="'
                     . $this->escapeAttribute($xoopsAssetsUrl . '/xoops-debugbar-settings.js') . '"></script>' . "\n";
-                $explainToken = $this->explainToken;
+                // The client never submits SQL: only the request id + a hash
+                // of a statement the server itself recorded (see
+                // stashQueriesForExplain()/explain.php). Off unless the
+                // explain_on_demand module preference is enabled.
+                $explainOnDemand = (bool) (Helper::getInstance()->getConfig('explain_on_demand') ?? false);
+                $explainToken = $explainOnDemand ? $this->explainToken : '';
+                $explainRequestId = $explainOnDemand ? \XoopsModules\Debugbar\Profiler::getInstance()->getRequestId() : '';
                 $output .= '<script type="text/javascript" src="'
                     . $this->escapeAttribute($xoopsAssetsUrl . '/frontend.js') . '" data-explain-url="'
                     . $this->escapeAttribute($this->moduleUrl() . '/explain.php') . '" data-explain-token="'
-                    . $this->escapeAttribute($explainToken) . '" data-profile-button="'
+                    . $this->escapeAttribute($explainToken) . '" data-explain-request-id="'
+                    . $this->escapeAttribute($explainRequestId) . '" data-profile-button="'
                     . ($this->profileButtonEnabled ? '1' : '0') . '" data-profile-trigger="1" data-profile-label="'
                     . $this->escapeAttribute(defined('_MD_DEBUGBAR_PROFILE_REQUEST') ? _MD_DEBUGBAR_PROFILE_REQUEST : 'Profile this request')
                     . '" data-profile-loading-label="'
                     . $this->escapeAttribute(defined('_MD_DEBUGBAR_PROFILE_REQUEST_LOADING') ? _MD_DEBUGBAR_PROFILE_REQUEST_LOADING : 'Profiling…')
                     . '"></script>' . "\n";
+                // Real User Monitoring: emit the web-vitals beacon loader
+                // (respects the rum_enable preference; empty for fragments).
+                $output .= \XoopsModules\Debugbar\Profiler::getInstance()->getRumHtml();
             }
             $this->writeOutput($output);
         } else {

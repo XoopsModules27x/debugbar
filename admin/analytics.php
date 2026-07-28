@@ -1,179 +1,400 @@
 <?php
-
 declare(strict_types=1);
 
+/**
+ * DebugBar Module - Admin Analytics
+ *
+ * Aggregated view of stored request profiles: worst offenders, N+1
+ * leaderboard, per-module comparison, budget violations, field web-vitals,
+ * OPcache health, and the flight recorder drill-down.
+ *
+ * @copyright       (c) 2000-2026 XOOPS Project (https://xoops.org)
+ * @license             GNU GPL 2 (https://www.gnu.org/licenses/gpl-2.0.html)
+ * @package             debugbar
+ */
+
+use Xmf\Module\Admin;
 use Xmf\Request;
-use XoopsModules\Debugbar\Analysis\BudgetChecker;
-use XoopsModules\Debugbar\Analysis\CachegrindCatalog;
-use XoopsModules\Debugbar\Analysis\XdebugStatus;
-use XoopsModules\Debugbar\FlightRecorder;
-use XoopsModules\Debugbar\ProfileRepository;
+use XoopsModules\Debugbar\Admin\AccessPolicy;
+use XoopsModules\Debugbar\Admin\AnalyticsBuilder;
 
 require_once __DIR__ . '/admin_header.php';
+xoops_cp_header();
 
-$adminObject = \Xmf\Module\Admin::getInstance();
+if (! AccessPolicy::isAllowed()) {
+    echo '<p style="color:#a00;font-weight:bold;">' . htmlspecialchars(_AM_DEBUGBAR_AN_FORBIDDEN, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</p>';
+    require_once __DIR__ . '/admin_footer.php';
 
-$xdebug = XdebugStatus::read();
-$cachegrindCatalog = new CachegrindCatalog($xdebug['output_dir']);
-$action = Request::getCmd('action', '', 'POST');
-if ($action === 'purge_cachegrind') {
-    if (! isset($GLOBALS['xoopsSecurity'])
-        || ! $GLOBALS['xoopsSecurity'] instanceof \XoopsSecurity
-        || ! $GLOBALS['xoopsSecurity']->check(true, false, 'DEBUGBAR_CACHEGRIND')) {
-        redirect_header('analytics.php', 3, _AM_DEBUGBAR_AN_CG_BAD_TOKEN);
-    }
-
-    $purged = $cachegrindCatalog->purgeOlderThan(30);
-    redirect_header('analytics.php', 2, sprintf(_AM_DEBUGBAR_AN_CG_PURGED, $purged));
+    return;
 }
 
-xoops_cp_header();
+$adminObject = Admin::getInstance();
 $adminObject->displayNavigation(basename(__FILE__));
 
-$repository = new ProfileRepository();
-$recorder = new FlightRecorder();
-$esc = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-$number = static fn (mixed $value, int $decimals = 1): string => number_format((float) $value, $decimals);
-
 /**
- * @param list<string> $headers
- * @param list<list<mixed>> $rows
+ * Escape for HTML output.
+ *
+ * @param mixed $value value to escape
+ * @return string
  */
-$renderTable = static function (string $title, array $headers, array $rows) use ($esc): void {
-    if ($title !== '') {
-        echo '<h2>' . $esc($title) . '</h2>';
-    }
-    if ($rows === []) {
-        echo '<p>' . $esc(_AM_DEBUGBAR_AN_NODATA) . '</p>';
-
-        return;
-    }
-
-    echo '<table class="outer" style="border-collapse:collapse;width:100%"><thead><tr>';
-    foreach ($headers as $header) {
-        echo '<th style="padding:5px;text-align:start">' . $esc($header) . '</th>';
-    }
-    echo '</tr></thead><tbody>';
-    foreach ($rows as $index => $row) {
-        echo '<tr class="' . ($index % 2 === 0 ? 'even' : 'odd') . '">';
-        foreach ($row as $value) {
-            if (is_array($value) && isset($value['html'])) {
-                echo '<td style="padding:5px">' . $value['html'] . '</td>';
-
-                continue;
-            }
-            echo '<td style="padding:5px">' . $esc($value) . '</td>';
-        }
-        echo '</tr>';
-    }
-    echo '</tbody></table>';
+$esc = static function ($value): string {
+    return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 };
 
-$requestedRecord = Request::getString('record', '', 'GET');
-if ($requestedRecord !== '') {
-    $record = $recorder->load($requestedRecord);
-    echo '<p><a href="analytics.php">&larr; ' . $esc(_AM_DEBUGBAR_AN_BACK) . '</a></p>';
-    echo '<h2>' . $esc(sprintf(_AM_DEBUGBAR_AN_RECORD, $record['url'] ?? $requestedRecord)) . '</h2>';
-    if ($record === null) {
-        echo '<p>' . $esc(_AM_DEBUGBAR_AN_RECORD_MISSING) . '</p>';
+/**
+ * Render one data table.
+ *
+ * @param string   $title   section heading (already translated)
+ * @param string[] $headers column headings
+ * @param array    $rows    list of cell lists (pre-escaped strings)
+ * @return string
+ */
+$table = static function (string $title, array $headers, array $rows) use ($esc): string {
+    $html = '<h3 style="margin:18px 0 6px;">' . $esc($title) . '</h3>';
+    if ([] === $rows) {
+        $html .= '<p style="color:#777;">' . $esc(_AM_DEBUGBAR_AN_NODATA) . '</p>';
+
+        return $html;
+    }
+    $html .= '<table class="outer" style="border-collapse:collapse;width:100%;"><tr>';
+    foreach ($headers as $header) {
+        $html .= '<th style="text-align:left;padding:4px 8px;">' . $esc($header) . '</th>';
+    }
+    $html .= '</tr>';
+    foreach ($rows as $i => $cells) {
+        $html .= '<tr class="' . (0 === $i % 2 ? 'even' : 'odd') . '">';
+        foreach ($cells as $cell) {
+            // Cells arrive pre-escaped (links allowed)
+            $html .= '<td style="padding:4px 8px;vertical-align:top;">' . $cell . '</td>';
+        }
+        $html .= '</tr>';
+    }
+    $html .= '</table>';
+
+    return $html;
+};
+
+$builder = new AnalyticsBuilder();
+
+// ---- Cachegrind POST actions (delete / purge) ------------------------------
+$op = Request::getString('op', '', 'POST');
+if ('cg_delete' === $op || 'cg_purge' === $op) {
+    if (! $GLOBALS['xoopsSecurity']->check()) {
+        redirect_header('analytics.php', 3, implode('<br>', $GLOBALS['xoopsSecurity']->getErrors()));
+    }
+    if ('cg_delete' === $op) {
+        $cgFile = Request::getString('cg_file', '', 'POST');
+        $builder->catalog()->delete($cgFile);
     } else {
-        $json = json_encode($record, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_PARTIAL_OUTPUT_ON_ERROR);
-        echo '<pre style="max-height:70vh;overflow:auto;padding:12px;border:1px solid #ccc">' . $esc($json !== false ? $json : '{}') . '</pre>';
+        $builder->catalog()->purgeOlderThan(30);
+    }
+    redirect_header('analytics.php', 2, _AM_DEBUGBAR_AN_CG_DELETED);
+}
+
+// ---- Flight-recorder detail view -------------------------------------------
+$file = Request::getString('file', '', 'GET');
+if ('' !== $file) {
+    $record = $builder->flightRecord($file);
+    echo '<p><a href="analytics.php">&larr; ' . $esc(_AM_DEBUGBAR_AN_BACK) . '</a></p>';
+    if (null === $record) {
+        echo '<p style="color:#a00;">' . $esc(_AM_DEBUGBAR_AN_RECORD_MISSING) . '</p>';
+    } else {
+        echo '<h3>' . $esc(_AM_DEBUGBAR_AN_RECORD) . ': ' . $esc($record['url'] ?? $file) . '</h3>';
+        echo '<pre style="background:#f7f7f7;border:1px solid #ddd;padding:10px;overflow:auto;max-height:70vh;">'
+            . $esc(json_encode($record, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES))
+            . '</pre>';
     }
     require_once __DIR__ . '/admin_footer.php';
 
     return;
 }
 
-$days = Request::getInt('days', 7, 'GET');
-if (! in_array($days, [1, 7, 30], true)) {
-    $days = 7;
+// ---- Cachegrind profile detail view -----------------------------------------
+$cgFile = Request::getString('cg', '', 'GET');
+if ('' !== $cgFile) {
+    echo '<p><a href="analytics.php">&larr; ' . $esc(_AM_DEBUGBAR_AN_BACK) . '</a></p>';
+    $top = $builder->cachegrindTop($cgFile);
+    if (null === $top) {
+        echo '<p style="color:#a00;">' . $esc(_AM_DEBUGBAR_AN_CG_MISSING) . '</p>';
+    } else {
+        $result = $top['result'];
+        echo '<h3>' . $esc(basename($cgFile)) . '</h3>';
+
+        $totalFormatted = null === $result->total
+            ? '—'
+            : ('ms' === $result->unit
+                ? number_format($result->total, 1) . ' ms'
+                : number_format($result->total) . ' ' . $result->unit);
+        // A truncated parse never reached the summary line: the total covers
+        // only the parsed prefix and must not read as the request total.
+        if ('truncated' === $result->status && '—' !== $totalFormatted) {
+            $totalFormatted = '≥ ' . $totalFormatted . ' (' . _AM_DEBUGBAR_AN_CG_PARTIAL . ')';
+        }
+
+        echo '<p style="color:#555;">'
+            . $esc($top['path']) . '<br>'
+            . $esc(_AM_DEBUGBAR_AN_CG_CREATOR) . ': ' . $esc($result->creator ?? '—') . ' &nbsp; '
+            . $esc(_AM_DEBUGBAR_AN_CG_COMMAND) . ': ' . $esc($result->command ?? '—') . '<br>'
+            . $esc(formatTimestamp($top['mtime'], 'mysql')) . ' &nbsp; '
+            . $esc(number_format($top['bytes'] / 1024, 1)) . ' KB &nbsp; '
+            . $esc(_AM_DEBUGBAR_AN_CG_TOTAL) . ': ' . $esc($totalFormatted)
+            . '</p>';
+
+        if ([] !== $result->warnings) {
+            echo '<ul style="color:#a60;">';
+            foreach ($result->warnings as $warning) {
+                echo '<li>' . $esc($warning) . '</li>';
+            }
+            echo '</ul>';
+        }
+
+        $rows = [];
+        foreach ($result->functions as $fn) {
+            $callsCell = 0 === (int) $fn['calls'] ? (int) $fn['invocations'] : (int) $fn['calls'];
+            $selfCell = 'ms' === $result->unit ? number_format((float) $fn['self'], 1) : number_format((float) $fn['self']);
+            $inclCell = 'ms' === $result->unit ? number_format((float) $fn['incl'], 1) : number_format((float) $fn['incl']);
+            $rows[] = [
+                $esc($fn['name']),
+                $esc($callsCell),
+                $esc($selfCell),
+                $esc(number_format((float) $fn['self_pct'], 1)) . '%',
+                $esc($inclCell),
+            ];
+        }
+        echo $table(
+            _AM_DEBUGBAR_AN_CG_TOP_FUNCTIONS,
+            [_AM_DEBUGBAR_AN_CG_FUNCTION, _AM_DEBUGBAR_AN_CG_CALLS, _AM_DEBUGBAR_AN_CG_SELF, _AM_DEBUGBAR_AN_CG_SELF_PCT, _AM_DEBUGBAR_AN_CG_INCL],
+            $rows
+        );
+
+        foreach ($result->warnings as $warning) {
+            if (str_starts_with($warning, 'recursion')) {
+                echo '<p style="color:#a60;">' . $esc(_AM_DEBUGBAR_AN_CG_RECURSION_NOTE) . '</p>';
+
+                break;
+            }
+        }
+    }
+    require_once __DIR__ . '/admin_footer.php';
+
+    return;
 }
 
-echo '<nav aria-label="Analytics range">';
-foreach ([1, 7, 30] as $range) {
-    $label = sprintf(_AM_DEBUGBAR_AN_DAYS, $range);
-    echo $range === $days
+// ---- Overview ----------------------------------------------------------------
+$sinceDays = Request::getInt('days', 7, 'GET');
+$sinceDays = in_array($sinceDays, [1, 7, 30], true) ? $sinceDays : 7;
+$data = $builder->build($sinceDays);
+
+// Window switcher + row count
+$windows = [];
+foreach ([1, 7, 30] as $days) {
+    $label = sprintf(_AM_DEBUGBAR_AN_DAYS, $days);
+    $windows[] = $days === $sinceDays
         ? '<strong>' . $esc($label) . '</strong>'
-        : '<a href="analytics.php?days=' . $range . '">' . $esc($label) . '</a>';
-    echo $range === 30 ? '' : ' | ';
+        : '<a href="analytics.php?days=' . $days . '">' . $esc($label) . '</a>';
 }
-echo ' &mdash; ' . $esc(sprintf(_AM_DEBUGBAR_AN_ROWCOUNT, number_format($repository->count()))) . '</nav>';
+echo '<p>' . implode(' | ', $windows)
+    . ' &nbsp;&mdash;&nbsp; ' . $esc(sprintf(_AM_DEBUGBAR_AN_ROWCOUNT, (int) $data['row_count'])) . '</p>';
 
-echo '<h2>' . $esc(_AM_DEBUGBAR_AN_OPCACHE) . '</h2>';
-$opcache = function_exists('opcache_get_status') ? opcache_get_status(false) : false;
-if (! is_array($opcache)) {
-    echo '<p>' . $esc(_AM_DEBUGBAR_AN_OPCACHE_UNAVAILABLE) . '</p>';
+if (true !== $data['table_exists']) {
+    echo '<p style="color:#a00;font-weight:bold;">' . $esc(_AM_DEBUGBAR_AN_NOTABLE) . '</p>';
+}
+
+// ---- OPcache health card -------------------------------------------------------
+$opcache = $data['opcache'];
+if (isset($opcache['available']) && true === $opcache['available']) {
+    $restartColor = $opcache['restarts'] > 0 ? '#a00' : '#080';
+    $wastedColor = $opcache['wasted_pct'] > 10 ? '#a60' : '#080';
+    echo '<h3 style="margin:18px 0 6px;">' . $esc(_AM_DEBUGBAR_AN_OPCACHE) . '</h3><p>'
+        . $esc(_AM_DEBUGBAR_AN_OPCACHE_HITRATE) . ': <strong>' . $esc($opcache['hit_rate']) . '%</strong> &nbsp; '
+        . $esc(_AM_DEBUGBAR_AN_OPCACHE_MEM) . ': ' . $esc($opcache['used_mb']) . ' MB used / ' . $esc($opcache['free_mb']) . ' MB free / '
+        . '<span style="color:' . $wastedColor . ';">' . $esc($opcache['wasted_mb']) . ' MB (' . $esc($opcache['wasted_pct']) . '%) wasted</span> &nbsp; '
+        . $esc(_AM_DEBUGBAR_AN_OPCACHE_SCRIPTS) . ': ' . $esc($opcache['cached_scripts']) . ' &nbsp; '
+        . $esc(_AM_DEBUGBAR_AN_OPCACHE_RESTARTS) . ': <span style="color:' . $restartColor . ';">' . $esc($opcache['restarts']) . '</span></p>';
 } else {
-    $hits = (int) ($opcache['opcache_statistics']['hits'] ?? 0);
-    $misses = (int) ($opcache['opcache_statistics']['misses'] ?? 0);
-    $hitRate = $hits + $misses > 0 ? 100 * $hits / ($hits + $misses) : 0;
-    $usedMb = (float) ($opcache['memory_usage']['used_memory'] ?? 0) / 1048576;
-    $freeMb = (float) ($opcache['memory_usage']['free_memory'] ?? 0) / 1048576;
-    $wastedMb = (float) ($opcache['memory_usage']['wasted_memory'] ?? 0) / 1048576;
-    echo '<p><strong>' . $esc(_AM_DEBUGBAR_AN_HIT_RATE) . ':</strong> ' . $esc($number($hitRate, 2)) . '% &nbsp; '
-        . '<strong>' . $esc(_AM_DEBUGBAR_AN_MEMORY) . ':</strong> ' . $esc($number($usedMb)) . ' MB used / ' . $esc($number($freeMb)) . ' MB free / ' . $esc($number($wastedMb)) . ' MB wasted &nbsp; '
-        . '<strong>' . $esc(_AM_DEBUGBAR_AN_CACHED_SCRIPTS) . ':</strong> ' . $esc(number_format((int) ($opcache['opcache_statistics']['num_cached_scripts'] ?? 0))) . ' &nbsp; '
-        . '<strong>' . $esc(_AM_DEBUGBAR_AN_RESTARTS) . ':</strong> ' . $esc(number_format((int) ($opcache['opcache_statistics']['oom_restarts'] ?? 0) + (int) ($opcache['opcache_statistics']['hash_restarts'] ?? 0) + (int) ($opcache['opcache_statistics']['manual_restarts'] ?? 0))) . '</p>';
+    echo '<h3 style="margin:18px 0 6px;">' . $esc(_AM_DEBUGBAR_AN_OPCACHE) . '</h3><p style="color:#777;">'
+        . $esc(_AM_DEBUGBAR_AN_OPCACHE_OFF) . '</p>';
 }
 
-$worstRows = [];
-foreach ($repository->worstUrls($days) as $row) {
-    $worstRows[] = [$row['url'], $row['dirname'] !== '' ? $row['dirname'] : '—', $row['hits'], $number($row['avg_ms']), $number($row['max_ms']), $number($row['avg_queries']), $row['max_nplus1'], $row['violations']];
-}
-$renderTable(_AM_DEBUGBAR_AN_WORST, [_AM_DEBUGBAR_AN_URL, _AM_DEBUGBAR_AN_MODULE, _AM_DEBUGBAR_AN_HITS, _AM_DEBUGBAR_AN_AVG_MS, _AM_DEBUGBAR_AN_MAX_MS, _AM_DEBUGBAR_AN_AVG_QUERIES, _AM_DEBUGBAR_AN_MAX_NPLUS1, _AM_DEBUGBAR_AN_VIOLATIONS], $worstRows);
-
-$nPlusOneRows = [];
-foreach ($repository->nPlusOneLeaders($days) as $row) {
-    $nPlusOneRows[] = [$row['url'], $row['dirname'] !== '' ? $row['dirname'] : '—', $row['hits'], $row['max_nplus1'], $number($row['avg_queries']), $row['sample_fp']];
-}
-$renderTable(_AM_DEBUGBAR_AN_NPLUS1, [_AM_DEBUGBAR_AN_URL, _AM_DEBUGBAR_AN_MODULE, _AM_DEBUGBAR_AN_HITS, _AM_DEBUGBAR_AN_MAX_NPLUS1, _AM_DEBUGBAR_AN_AVG_QUERIES, _AM_DEBUGBAR_AN_SAMPLE_FP], $nPlusOneRows);
-
-$moduleRows = [];
-foreach ($repository->moduleAggregates($days) as $row) {
-    $moduleRows[] = [$row['dirname'], $row['hits'], $number($row['avg_ms']), $number($row['avg_queries']), $number($row['avg_payload_kb']), $row['fragment_hits'], $row['violations']];
-}
-$renderTable(_AM_DEBUGBAR_AN_MODULES, [_AM_DEBUGBAR_AN_MODULE, _AM_DEBUGBAR_AN_HITS, _AM_DEBUGBAR_AN_AVG_MS, _AM_DEBUGBAR_AN_AVG_QUERIES, _AM_DEBUGBAR_AN_AVG_PAYLOAD, _AM_DEBUGBAR_AN_FRAGMENTS, _AM_DEBUGBAR_AN_VIOLATIONS], $moduleRows);
-
-$violationRows = [];
-foreach ($repository->recentViolations() as $row) {
-    $violationRows[] = [formatTimestamp((int) $row['created'], 'mysql'), $row['url'], $row['dirname'] !== '' ? $row['dirname'] : '—', $number($row['total_ms']), $row['query_count'], implode(', ', BudgetChecker::decodeFlags((int) $row['flags']))];
-}
-$renderTable(_AM_DEBUGBAR_AN_VIOLATIONS_FEED, [_AM_DEBUGBAR_AN_WHEN, _AM_DEBUGBAR_AN_URL, _AM_DEBUGBAR_AN_MODULE, _AM_DEBUGBAR_AN_TOTAL_MS, _AM_DEBUGBAR_AN_QUERIES, _AM_DEBUGBAR_AN_FLAGS], $violationRows);
-
-$flightRows = [];
-foreach ($recorder->listRecords() as $record) {
-    $link = 'analytics.php?' . http_build_query(['record' => $record['file']], '', '&amp;', PHP_QUERY_RFC3986);
-    $flightRows[] = [
-        formatTimestamp($record['created'], 'mysql'),
-        $record['violation'] ? _AM_DEBUGBAR_AN_VIOLATION : _AM_DEBUGBAR_AN_OK,
-        $record['request_id'],
-        $number($record['bytes'] / 1024) . ' KB',
-        ['html' => '<a href="' . $esc($link) . '">' . $esc(_AM_DEBUGBAR_AN_VIEW) . '</a>'],
+// ---- Worst offenders ------------------------------------------------------------
+$rows = [];
+foreach ($data['worst_urls'] as $row) {
+    $rows[] = [
+        $esc($row['url']),
+        $esc((null !== $row['dirname'] && '' !== $row['dirname']) ? $row['dirname'] : '—'),
+        $esc((int) $row['hits']),
+        $esc(number_format((float) $row['avg_ms'], 1)),
+        $esc(number_format((float) $row['max_ms'], 1)),
+        $esc(number_format((float) $row['avg_queries'], 1)),
+        $esc((int) $row['max_nplus1']),
+        $esc((int) $row['violations']),
     ];
 }
-$renderTable(_AM_DEBUGBAR_AN_FLIGHT, [_AM_DEBUGBAR_AN_WHEN, _AM_DEBUGBAR_AN_STATUS, _AM_DEBUGBAR_AN_REQUEST, _AM_DEBUGBAR_AN_SIZE, ''], $flightRows);
+echo $table(
+    _AM_DEBUGBAR_AN_WORST,
+    [_AM_DEBUGBAR_AN_URL, _AM_DEBUGBAR_AN_MODULE, _AM_DEBUGBAR_AN_HITS, _AM_DEBUGBAR_AN_AVG_MS, _AM_DEBUGBAR_AN_MAX_MS, _AM_DEBUGBAR_AN_AVG_QUERIES, _AM_DEBUGBAR_AN_MAX_NPLUS1, _AM_DEBUGBAR_AN_VIOLATIONS],
+    $rows
+);
 
-echo '<h2>' . $esc(_AM_DEBUGBAR_AN_CG_SECTION) . '</h2>';
-$xdebugModes = implode(', ', $xdebug['modes']);
-echo '<p><strong>' . $esc(_AM_DEBUGBAR_AN_CG_EXTENSION) . ':</strong> ' . $esc($xdebug['loaded'] ? _AM_DEBUGBAR_AN_CG_LOADED : _AM_DEBUGBAR_AN_CG_NOT_LOADED) . ' &nbsp; '
-    . '<strong>' . $esc(_AM_DEBUGBAR_AN_CG_MODES) . ':</strong> ' . $esc($xdebugModes !== '' ? $xdebugModes : '—') . ' &nbsp; '
-    . '<strong>' . $esc(_AM_DEBUGBAR_AN_CG_START) . ':</strong> ' . $esc($xdebug['start_with_request'] !== '' ? $xdebug['start_with_request'] : '—') . '<br>'
-    . '<strong>' . $esc(_AM_DEBUGBAR_AN_CG_DIR) . ':</strong> ' . $esc($xdebug['output_dir'] !== '' ? $xdebug['output_dir'] : '—') . ' (' . $esc($xdebug['directory_state']) . ') &nbsp; '
-    . '<strong>' . $esc(_AM_DEBUGBAR_AN_CG_ZLIB) . ':</strong> ' . $esc($xdebug['zlib'] ? _AM_DEBUGBAR_AN_CG_LOADED : _AM_DEBUGBAR_AN_CG_NOT_LOADED) . '</p>';
-
-$cachegrindRows = [];
-foreach ($cachegrindCatalog->listFiles() as $file) {
-    $cachegrindRows[] = [formatTimestamp($file['modified'], 'mysql'), $file['file'], $number($file['size'] / 1024) . ' KB'];
+// ---- N+1 leaderboard --------------------------------------------------------------
+$rows = [];
+foreach ($data['nplus1_leaders'] as $row) {
+    $rows[] = [
+        $esc($row['url']),
+        $esc((null !== $row['dirname'] && '' !== $row['dirname']) ? $row['dirname'] : '—'),
+        $esc((int) $row['hits']),
+        $esc((int) $row['max_nplus1']),
+        $esc(number_format((float) $row['avg_queries'], 1)),
+        '<code style="font-size:11px;">' . $esc(mb_strimwidth((string) $row['sample_fp'], 0, 120, '…')) . '</code>',
+    ];
 }
-$renderTable('', [_AM_DEBUGBAR_AN_WHEN, _AM_DEBUGBAR_AN_CG_FILE, _AM_DEBUGBAR_AN_SIZE], $cachegrindRows);
-$purgeConfirmation = json_encode(_AM_DEBUGBAR_AN_CG_PURGE_CONFIRM, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
-echo '<form method="post" action="analytics.php" style="margin-block:12px">'
-    . $GLOBALS['xoopsSecurity']->getTokenHTML('DEBUGBAR_CACHEGRIND')
-    . '<input type="hidden" name="action" value="purge_cachegrind">'
-    . '<button class="formButton" type="submit" onclick="return confirm(' . $esc($purgeConfirmation !== false ? $purgeConfirmation : '""') . ')">'
-    . $esc(_AM_DEBUGBAR_AN_CG_PURGE)
-    . '</button></form>';
-echo '<p>' . $esc(_AM_DEBUGBAR_AN_CG_ALTERNATIVES) . '</p>';
+echo $table(
+    _AM_DEBUGBAR_AN_NPLUS1,
+    [_AM_DEBUGBAR_AN_URL, _AM_DEBUGBAR_AN_MODULE, _AM_DEBUGBAR_AN_HITS, _AM_DEBUGBAR_AN_MAX_NPLUS1, _AM_DEBUGBAR_AN_AVG_QUERIES, _AM_DEBUGBAR_AN_SAMPLE_FP],
+    $rows
+);
+
+// ---- Per-module comparison -----------------------------------------------------------
+$rows = [];
+foreach ($data['modules'] as $row) {
+    $rows[] = [
+        $esc((null !== $row['dirname'] && '' !== $row['dirname']) ? $row['dirname'] : '—'),
+        $esc((int) $row['hits']),
+        $esc(number_format((float) $row['avg_ms'], 1)),
+        $esc(number_format((float) $row['avg_queries'], 1)),
+        $esc(number_format(((float) $row['avg_payload']) / 1024, 1)),
+        $esc((int) $row['fragment_hits']),
+        $esc((int) $row['violations']),
+    ];
+}
+echo $table(
+    _AM_DEBUGBAR_AN_MODULES,
+    [_AM_DEBUGBAR_AN_MODULE, _AM_DEBUGBAR_AN_HITS, _AM_DEBUGBAR_AN_AVG_MS, _AM_DEBUGBAR_AN_AVG_QUERIES, _AM_DEBUGBAR_AN_AVG_PAYLOAD, _AM_DEBUGBAR_AN_FRAGMENTS, _AM_DEBUGBAR_AN_VIOLATIONS],
+    $rows
+);
+
+// ---- Recent violations -------------------------------------------------------------------
+$rows = [];
+foreach ($data['violations'] as $row) {
+    $rows[] = [
+        $esc(formatTimestamp((int) $row['created'], 'mysql')),
+        $esc($row['url']),
+        $esc((null !== $row['dirname'] && '' !== $row['dirname']) ? $row['dirname'] : '—'),
+        $esc(number_format((float) $row['total_ms'], 1)),
+        $esc((int) $row['query_count']),
+        $esc(implode(', ', $row['flag_names'])),
+    ];
+}
+echo $table(
+    _AM_DEBUGBAR_AN_VIOLATIONS_FEED,
+    [_AM_DEBUGBAR_AN_WHEN, _AM_DEBUGBAR_AN_URL, _AM_DEBUGBAR_AN_MODULE, _AM_DEBUGBAR_AN_TOTAL_MS, _AM_DEBUGBAR_AN_QUERIES, _AM_DEBUGBAR_AN_FLAGS],
+    $rows
+);
+
+// ---- Field web-vitals ------------------------------------------------------------------------
+$rows = [];
+foreach ($data['vitals'] as $row) {
+    $lcp = (float) $row['avg_lcp'];
+    $lcpColor = $lcp <= 2500 ? '#080' : ($lcp <= 4000 ? '#a60' : '#a00');
+    $rows[] = [
+        $esc($row['url']),
+        $esc((int) $row['samples']),
+        '<span style="color:' . $lcpColor . ';">' . $esc(number_format($lcp, 0)) . '</span>',
+        $esc(null !== $row['avg_inp'] ? number_format((float) $row['avg_inp'], 0) : '—'),
+        $esc(null !== $row['avg_cls'] ? number_format((float) $row['avg_cls'], 3) : '—'),
+        $esc(number_format((float) $row['avg_server_ms'], 1)),
+    ];
+}
+echo $table(
+    _AM_DEBUGBAR_AN_VITALS,
+    [_AM_DEBUGBAR_AN_URL, _AM_DEBUGBAR_AN_SAMPLES, _AM_DEBUGBAR_AN_LCP, _AM_DEBUGBAR_AN_INP, _AM_DEBUGBAR_AN_CLS, _AM_DEBUGBAR_AN_SERVER_MS],
+    $rows
+);
+
+// ---- Flight recorder ---------------------------------------------------------------------------
+$rows = [];
+foreach ($data['flight_records'] as $record) {
+    $rows[] = [
+        $esc(formatTimestamp($record['created'], 'mysql')),
+        true === $record['violation']
+            ? '<span style="color:#a00;font-weight:bold;">' . $esc(_AM_DEBUGBAR_AN_VIOLATION) . '</span>'
+            : $esc(_AM_DEBUGBAR_AN_OK),
+        $esc($record['request_id']),
+        $esc(number_format($record['bytes'] / 1024, 1) . ' KB'),
+        '<a href="analytics.php?file=' . $esc(rawurlencode($record['file'])) . '">' . $esc(_AM_DEBUGBAR_AN_VIEW) . '</a>',
+    ];
+}
+echo $table(
+    _AM_DEBUGBAR_AN_FLIGHT,
+    [_AM_DEBUGBAR_AN_WHEN, _AM_DEBUGBAR_AN_STATUS, _AM_DEBUGBAR_AN_REQUEST, _AM_DEBUGBAR_AN_SIZE, ''],
+    $rows
+);
+
+// ---- Xdebug profiles ------------------------------------------------------------------------
+$xdebug = $data['xdebug'];
+echo '<h3 style="margin:18px 0 6px;">' . $esc(_AM_DEBUGBAR_AN_CG_SECTION) . '</h3>';
+
+$dirStateLabels = [
+    'unconfigured' => _AM_DEBUGBAR_AN_CG_DIR_UNCONFIGURED,
+    'missing' => _AM_DEBUGBAR_AN_CG_DIR_MISSING,
+    'unreadable' => _AM_DEBUGBAR_AN_CG_DIR_UNREADABLE,
+    'ok' => _AM_DEBUGBAR_AN_CG_DIR_OK,
+];
+
+echo '<p>'
+    . $esc(_AM_DEBUGBAR_AN_CG_EXTENSION) . ': ' . $esc(true === $xdebug['extension_loaded'] ? _AM_DEBUGBAR_AN_CG_LOADED : _AM_DEBUGBAR_AN_CG_NOT_LOADED) . ' &nbsp; '
+    . $esc(_AM_DEBUGBAR_AN_CG_MODES) . ': ' . $esc([] !== $xdebug['modes'] ? implode(', ', $xdebug['modes']) : '—') . ' &nbsp; '
+    . $esc(_AM_DEBUGBAR_AN_CG_START) . ': ' . $esc('' !== $xdebug['start_with_request'] ? $xdebug['start_with_request'] : '—') . '<br>'
+    . $esc(_AM_DEBUGBAR_AN_CG_DIR) . ': ' . $esc('' !== $xdebug['output_dir'] ? $xdebug['output_dir'] : '—')
+    . ' (' . $esc($dirStateLabels[$xdebug['output_dir_state']] ?? $xdebug['output_dir_state']) . ') &nbsp; '
+    . $esc(_AM_DEBUGBAR_AN_CG_ZLIB) . ': ' . $esc(true === $xdebug['zlib'] ? _AM_DEBUGBAR_AN_CG_LOADED : _AM_DEBUGBAR_AN_CG_NOT_LOADED)
+    . '</p>';
+
+if (isset($xdebug['shared_dir_warning']) && true === $xdebug['shared_dir_warning']) {
+    echo '<p style="color:#a60;">' . $esc(_AM_DEBUGBAR_AN_CG_SHARED_DIR) . '</p>';
+}
+
+if (true !== $xdebug['can_trigger']) {
+    echo '<p>' . $esc(_AM_DEBUGBAR_AN_CG_INI_HINT) . '</p>'
+        . '<pre style="background:#f7f7f7;border:1px solid #ddd;padding:10px;font-family:monospace;">'
+        . "xdebug.mode=develop,profile\n"
+        . "xdebug.start_with_request=trigger\n"
+        . 'xdebug.output_dir="C:/wamp64/tmp/xdebug"' . "\n"
+        . 'xdebug.profiler_append=0'
+        . '</pre>';
+}
+
+$tokenHtml = $GLOBALS['xoopsSecurity']->getTokenHTML();
+
+$rows = [];
+foreach ($data['cachegrind_files'] as $cgRow) {
+    $encodedFile = rawurlencode($cgRow['file']);
+    $deleteForm = '<form method="post" action="analytics.php" style="display:inline;margin:0;">'
+        . '<input type="hidden" name="op" value="cg_delete">'
+        . '<input type="hidden" name="cg_file" value="' . $esc($cgRow['file']) . '">'
+        . $tokenHtml
+        . '<button type="submit" class="formButton">' . $esc(_AM_DEBUGBAR_AN_DELETE) . '</button>'
+        . '</form>';
+    $rows[] = [
+        $esc(formatTimestamp($cgRow['mtime'], 'mysql')),
+        $esc($cgRow['file']),
+        $esc(number_format($cgRow['bytes'] / 1024, 1)),
+        '<a href="analytics.php?cg=' . $esc($encodedFile) . '">' . $esc(_AM_DEBUGBAR_AN_CG_VIEW) . '</a>',
+        $deleteForm,
+    ];
+}
+echo $table(
+    _AM_DEBUGBAR_AN_CG_SECTION,
+    [_AM_DEBUGBAR_AN_WHEN, _AM_DEBUGBAR_AN_CG_FILE, _AM_DEBUGBAR_AN_CG_SIZE, '', ''],
+    $rows
+);
+
+echo '<form method="post" action="analytics.php" style="margin:8px 0;">'
+    . '<input type="hidden" name="op" value="cg_purge">'
+    . $tokenHtml
+    . '<button type="submit" class="formButton">' . $esc(_AM_DEBUGBAR_AN_CG_PURGE) . '</button>'
+    . '</form>';
+
+echo '<p style="color:#777;">' . $esc(_AM_DEBUGBAR_AN_CG_ALTERNATIVES) . '</p>';
 
 require_once __DIR__ . '/admin_footer.php';

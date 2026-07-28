@@ -16,7 +16,7 @@ defined('XOOPS_ROOT_PATH') || exit('Restricted access');
 $modversion = [];
 
 // --- Module Info ---
-$modversion['version']      = '1.3.3';
+$modversion['version']      = '1.4.0';
 $modversion['release_date'] = '2026/07/28';
 $modversion['name']         = _MI_DEBUGBAR_NAME;
 $modversion['description']  = _MI_DEBUGBAR_DSC;
@@ -139,9 +139,15 @@ foreach ([
     ['profiles_retention_days', '_MI_DEBUGBAR_PROFILES_RETENTION', 7],
     ['profiles_max_rows', '_MI_DEBUGBAR_PROFILES_MAX_ROWS', 10000],
 ] as [$name, $title, $default]) {
+    $description = match ($name) {
+        'nplus1_threshold' => '_MI_DEBUGBAR_NPLUS1_THRESHOLD_DSC',
+        'profiles_retention_days' => '_MI_DEBUGBAR_PROFILES_RETENTION_DSC',
+        'profiles_max_rows' => '_MI_DEBUGBAR_PROFILES_MAX_ROWS_DSC',
+        default => '_MI_DEBUGBAR_BUDGET_DSC',
+    };
     $modversion['config'][] = [
         'name' => $name, 'title' => $title,
-        'description' => $name === 'nplus1_threshold' ? '_MI_DEBUGBAR_NPLUS1_THRESHOLD_DSC' : '_MI_DEBUGBAR_BUDGET_DSC',
+        'description' => $description,
         'formtype' => 'textbox', 'valuetype' => 'int', 'default' => $default,
     ];
 }
@@ -153,9 +159,46 @@ $modversion['config'][] = [
 ];
 
 $modversion['config'][] = [
-    'name'        => 'profile_button_enable',
-    'title'       => '_MI_DEBUGBAR_PROFILE_BUTTON_ENABLE',
-    'description' => '_MI_DEBUGBAR_PROFILE_BUTTON_ENABLE_DSC',
+    'name'        => 'rum_enable',
+    'title'       => '_MI_DEBUGBAR_RUM_ENABLE',
+    'description' => '_MI_DEBUGBAR_RUM_ENABLE_DSC',
+    'formtype'    => 'yesno',
+    'valuetype'   => 'int',
+    'default'     => 1,
+];
+
+// --- Core-seam tap() collectors (Events / Authz / Templates) ---
+$modversion['config'][] = [
+    'name'        => 'collect_events',
+    'title'       => '_MI_DEBUGBAR_COLLECT_EVENTS',
+    'description' => '_MI_DEBUGBAR_COLLECT_EVENTS_DSC',
+    'formtype'    => 'yesno',
+    'valuetype'   => 'int',
+    'default'     => 0,
+];
+
+$modversion['config'][] = [
+    'name'        => 'collect_authz',
+    'title'       => '_MI_DEBUGBAR_COLLECT_AUTHZ',
+    'description' => '_MI_DEBUGBAR_COLLECT_AUTHZ_DSC',
+    'formtype'    => 'yesno',
+    'valuetype'   => 'int',
+    'default'     => 0,
+];
+
+$modversion['config'][] = [
+    'name'        => 'collect_templates',
+    'title'       => '_MI_DEBUGBAR_COLLECT_TEMPLATES',
+    'description' => '_MI_DEBUGBAR_COLLECT_TEMPLATES_DSC',
+    'formtype'    => 'yesno',
+    'valuetype'   => 'int',
+    'default'     => 0,
+];
+
+$modversion['config'][] = [
+    'name'        => 'xdebug_button_enable',
+    'title'       => '_MI_DEBUGBAR_XDEBUG_BUTTON',
+    'description' => '_MI_DEBUGBAR_XDEBUG_BUTTON_DSC',
     'formtype'    => 'yesno',
     'valuetype'   => 'int',
     'default'     => 1,
@@ -171,6 +214,15 @@ $modversion['config'][] = [
 ];
 
 $modversion['config'][] = [
+    'name'        => 'explain_on_demand',
+    'title'       => '_MI_DEBUGBAR_EXPLAIN_ON_DEMAND',
+    'description' => '_MI_DEBUGBAR_EXPLAIN_ON_DEMAND_DSC',
+    'formtype'    => 'yesno',
+    'valuetype'   => 'int',
+    'default'     => 0,
+];
+
+$modversion['config'][] = [
     'name'        => 'monolog_level',
     'title'       => '_MI_DEBUGBAR_MONOLOG_LEVEL',
     'description' => '_MI_DEBUGBAR_MONOLOG_LEVEL_DSC',
@@ -182,4 +234,24 @@ $modversion['config'][] = [
         _MI_DEBUGBAR_LEVEL_NOTICE => 'notice', _MI_DEBUGBAR_LEVEL_WARNING => 'warning',
         _MI_DEBUGBAR_LEVEL_ERROR => 'error', _MI_DEBUGBAR_LEVEL_CRITICAL => 'critical',
     ],
+];
+
+// --- Auto-EXPLAIN slowest SELECTs ---
+$modversion['config'][] = [
+    'name'        => 'explain_slow',
+    'title'       => '_MI_DEBUGBAR_EXPLAIN_SLOW',
+    'description' => '_MI_DEBUGBAR_EXPLAIN_SLOW_DSC',
+    'formtype'    => 'yesno',
+    'valuetype'   => 'int',
+    'default'     => 1,
+];
+
+// --- Copy-to-clipboard secret redaction ---
+$modversion['config'][] = [
+    'name'        => 'copy_redact',
+    'title'       => '_MI_DEBUGBAR_COPY_REDACT',
+    'description' => '_MI_DEBUGBAR_COPY_REDACT_DSC',
+    'formtype'    => 'yesno',
+    'valuetype'   => 'int',
+    'default'     => 1,
 ];

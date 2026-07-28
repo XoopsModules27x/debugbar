@@ -4,6 +4,43 @@ All notable changes to the XOOPS DebugBar module are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses semantic versioning.
 
+## [1.4.0] - 2026-07-28
+
+### Added
+
+- Added real-user monitoring: `assets/xoops-debugbar-rum.js` collects field web vitals (LCP, INP, CLS) in the browser and posts them to a new `beacon.php` endpoint via `navigator.sendBeacon()`, which attaches them to the matching stored profile. The Analytics page gained a Field web-vitals table showing per-URL averages against a colour-coded LCP threshold. The endpoint is POST-only and gated on module admin, XOOPS debug mode, a `DEBUGBAR_RUM` token, and a shape-validated request id.
+- Added an Xdebug profile viewer. `CachegrindParser` reads `cachegrind.out.*` output (plain or gzip-compressed) into an immutable `CachegrindResult`, and the Analytics page lists profiles with creator, command, total cost, and a top-functions breakdown by inclusive/self cost. Individual profiles can be deleted and the directory purged, both behind CSRF tokens.
+- Added `AssetScanner`, which scans rendered HTML for script and stylesheet tags, sums local asset sizes, and flags a duplicated JavaScript runtime (two copies of jQuery, Alpine, htmx, and similar) on one page.
+- Added `AnalyticsBuilder`, which aggregates stored profiles, flight-recorder dumps, and OPcache health into plain arrays, leaving the admin page responsible only for rendering and escaping.
+- Added `AccessPolicy`, centralising the "may this admin page run" decision (module admin, XOOPS debug mode, and the module's own enable switch must all agree) for pages that expose profiling data.
+- Added `RequestShape`, sharing fragment/AJAX detection and URL normalisation between the logger and the profiler. It prefers `Xmf\Http\FragmentNegotiator` when available and falls back to a header check, and never throws, since it runs on the hot path of every profiled request.
+- Added `QueryFingerprinter`, normalising statements so that structurally identical queries differing only in literal values can be grouped for N+1 and repeat analysis.
+- Added `CachegrindCatalog::delete()`. The Analytics page already offered a per-profile Delete button that called this method, so pressing it raised a fatal "call to undefined method" error. Deletion resolves the name through the existing containment check, so a caller cannot escape the configured output directory by traversal or symlink.
+
+### Fixed
+
+- Defined 45 `_AM_DEBUGBAR_*` language constants that the Analytics, Diagnostics, and Ray admin pages referenced but that were never declared. Referencing an undefined constant is a fatal error on PHP 8, so the affected panels crashed rather than rendering.
+- Truncated each stored profile column to its own width instead of a single shared 500-character cap. `slowest_fp` is a normalised SQL fingerprint and routinely exceeds its `VARCHAR(255)`; under MySQL strict mode the oversized insert raised error 1406, which the surrounding `catch` swallowed, so affected profiles were silently never recorded at all.
+- Recorded the slowest query over every statement rather than only over those past the slow-query threshold. On any page where nothing crossed the threshold, `slowest_ms` was stored as `0.0` and `slowest_fp` as an empty string, which made the Analytics slowest columns and worst-URL ranking wrong for exactly the ordinary pages they are meant to characterise.
+- Reported the Xdebug environment through the fuller status evaluator, which reads effective modes via `xdebug_info()` with an ini fallback and adds a shared-temporary-directory warning. The Analytics page had been reading keys the previous evaluator never returned, so the panel reported "not loaded" no matter how Xdebug was configured.
+- Indexed `request_id` on the profiles table. `updateVitals()` looks a profile up by request id on every web-vitals beacon, which is once per page view, and without the index that was a scan of the entire retained table. Existing installations gain the index through an idempotent migration.
+- Realigned `sql/mysql.sql` with the installer's own `CREATE TABLE`, which had drifted: the standalone file was missing the `lcp_ms`, `inp_ms`, and `cls` columns that `updateVitals()` writes to unconditionally.
+- Removed an unreachable branch in `QueryAnalyzer` that tested for a single query shape variant after an earlier guard had already required at least three.
+
+### Security
+
+- Reworked the on-demand EXPLAIN endpoint so the browser never sends SQL. The client now posts a request id and a statement hash, and the server resolves them against a short-lived stash it recorded itself, rejecting anything that is not a `SELECT`. The endpoint additionally requires POST, an authenticated admin, a `DEBUGBAR_EXPLAIN` token, and the `explain_on_demand` preference, and it returns generic JSON errors that leak neither SQL nor paths.
+- Added `SqlRedactor`, which rewrites every string literal to `''` and every numeric literal to `0` before a statement is stashed for EXPLAIN. No session id, password, or token value is persisted, while the statement still yields a representative plan.
+
+### Changed
+
+- Capped each query-findings list (slow queries, duplicates, N+1 groups, similar shapes) at ten entries. A page issuing thousands of queries previously emitted one entry per finding into the Performance panel, the flight-recorder dump, and the warning log. The reported counts remain exact.
+- Expanded the unit suite from 4 tests to 53 (214 assertions), covering the admin access policy, diagnostic sanitiser, SQL redactor and EXPLAIN stash redaction, Monolog log parsing and cataloguing, system diagnostics, endpoint gating, and profile-schema consistency between the DDL and the insert statement.
+
+### Removed
+
+- Removed `SqlStatementClassifier` and `ExplainSecretStore`. Both existed to make client-submitted EXPLAIN SQL safe, and the redesign above means no client-submitted SQL reaches the endpoint at all.
+
 ## [1.3.3] - 2026-07-28
 
 ### Fixed

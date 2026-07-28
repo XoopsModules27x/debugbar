@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace XoopsModules\Debugbar\Analysis;
 
-use XoopsModules\Debugbar\ExplainSecretStore;
-
 defined('XOOPS_ROOT_PATH') || exit('Restricted access');
 
 /**
@@ -64,7 +62,7 @@ final class SystemDiagnostics
                 $this->packageRow('whoops', ['filp/whoops']),
                 $this->packageRow('ray', ['spatie/ray', 'spatie/global-ray'], function_exists('ray')),
                 $this->tracyBootstrapRow(),
-                $this->explainSecretRow(),
+                $this->explainStashRow(),
             ],
             'storage' => [
                 $this->writableRow('logs', $this->varPath . '/logs'),
@@ -161,37 +159,46 @@ final class SystemDiagnostics
         return $this->row($id, $writable ? 'Writable' : 'Read only', $writable ? 'ok' : 'warning');
     }
 
-    /** @return array{id: string, value: string, status: string, detail: string} */
-    private function explainSecretRow(): array
+    /**
+     * A's on-demand EXPLAIN design now stashes the server's own recorded SQL
+     * server-side instead of trusting a client-submitted signed token (see
+     * DebugbarLogger::stashQueriesForExplain()/explain.php). This row reports
+     * the health of that stash directory instead: does it exist, is it
+     * writable, how many cached entries are sitting in it.
+     *
+     * @return array{id: string, value: string, status: string, detail: string}
+     */
+    private function explainStashRow(): array
     {
-        $status = (new ExplainSecretStore($this->varPath . '/data'))->status();
-        $underDocumentRoot = $this->isPathWithin($this->varPath, $this->rootPath);
+        $path = rtrim($this->varPath, '/\\') . '/caches/debugbar_explain';
 
-        if ($status === 'available') {
+        if (! is_dir($path)) {
             return $this->row(
-                'explain_secret',
-                'Available',
-                $underDocumentRoot ? 'warning' : 'ok',
-                $underDocumentRoot
-                    ? 'Protected data is below the document root; verify that the web server denies direct access.'
-                    : 'Signed EXPLAIN actions are available.'
+                'explain_stash',
+                'Missing',
+                'info',
+                'Created automatically the first time a slow query is stashed for on-demand EXPLAIN.'
             );
         }
 
-        return match ($status) {
-            'invalid' => $this->row('explain_secret', 'Invalid', 'warning', 'Run the module update to replace the signing key.'),
-            'unsafe' => $this->row('explain_secret', 'Unsafe', 'warning', 'The signing-key destination is not a safe regular file.'),
-            'unwritable' => $this->row('explain_secret', 'Unwritable', 'warning', 'Make the protected XOOPS data directory writable and run the module update.'),
-            default => $this->row('explain_secret', 'Missing', 'warning', 'Run the module update to create the signing key.'),
-        };
-    }
+        if (! is_writable($path)) {
+            return $this->row(
+                'explain_stash',
+                'Read only',
+                'warning',
+                'Make the directory writable so slow-query EXPLAIN stashing can work.'
+            );
+        }
 
-    private function isPathWithin(string $path, string $parent): bool
-    {
-        $path = rtrim(str_replace('\\', '/', $path), '/') . '/';
-        $parent = rtrim(str_replace('\\', '/', $parent), '/') . '/';
+        $files = glob($path . '/*.json');
+        $count = is_array($files) ? count($files) : 0;
 
-        return str_starts_with(strtolower($path), strtolower($parent));
+        return $this->row(
+            'explain_stash',
+            'Ready',
+            'ok',
+            sprintf('%d cached %s', $count, $count === 1 ? 'query' : 'queries')
+        );
     }
 
     /** @return array{id: string, value: string, status: string, detail: string} */

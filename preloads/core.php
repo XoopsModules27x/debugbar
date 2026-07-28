@@ -131,8 +131,8 @@ class DebugbarCorePreload extends XoopsPreloadItem
         if (is_array($moduleConfig) && isset($moduleConfig['memory_threshold'])) {
             $logger->setMemoryThreshold((int) $moduleConfig['memory_threshold'] * 1024 * 1024);
         }
-        if (is_array($moduleConfig) && isset($moduleConfig['profile_button_enable'])) {
-            $logger->setProfileButtonEnabled((bool) $moduleConfig['profile_button_enable']);
+        if (is_array($moduleConfig) && isset($moduleConfig['xdebug_button_enable'])) {
+            $logger->setProfileButtonEnabled((bool) $moduleConfig['xdebug_button_enable']);
         }
 
         // Enable Ray only now (never at common.start): the request has reached

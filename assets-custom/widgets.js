@@ -7,6 +7,23 @@
 
     const csscls = PhpDebugBar.utils.makecsscls('phpdebugbar-widgets-');
 
+    const REDACT_KEYS = /pass(word)?|secret|token|auth|session|cookie|jwt|api[_-]?key/i;
+    // Mask secret-keyed values at any depth. For objects/arrays the redacted
+    // copy is returned so callers can stringify it without leaking nested
+    // secrets. A free-text `message` string cannot be key-matched and is out
+    // of scope (display in the bar is never redacted either).
+    const redactValue = PhpDebugBar.Widgets.redactValue = function (key, value) {
+        if (!(window.XoopsDebugbarConfig && window.XoopsDebugbarConfig.copyRedact)) { return value; }
+        if (REDACT_KEYS.test(String(key))) { return '***REDACTED***'; }
+        if (Array.isArray(value)) { return value.map((item) => redactValue('', item)); }
+        if (value && typeof value === 'object') {
+            const out = {};
+            for (const k of Object.keys(value)) { out[k] = redactValue(k, value[k]); }
+            return out;
+        }
+        return value;
+    };
+
     /**
      * Replaces spaces with &nbsp; and line breaks with <br>
      *
@@ -594,9 +611,10 @@
                 }
                 if (Object.keys(context).length > 0) {
                     lines.push('Context:\n' + Object.keys(context).map((key) => {
-                        return key + ': ' + (typeof context[key] === 'object'
-                            ? JSON.stringify(context[key], null, 2)
-                            : String(context[key]));
+                        const redacted = redactValue(key, context[key]);
+                        return key + ': ' + (redacted && typeof redacted === 'object'
+                            ? JSON.stringify(redacted, null, 2)
+                            : String(redacted));
                     }).join('\n'));
                 }
                 return lines.join('\n');
@@ -718,11 +736,12 @@
                         val.append(copy);
                     }
 
-                    if (value.context.is_query && value.context.sql && window.phpdebugbar_explain) {
+                    if (value.context.is_query && value.context.sql && window.phpdebugbar_explain && window.phpdebugbar_explain.requestId) {
                         const explain = document.createElement('button');
                         explain.type = 'button';
                         explain.textContent = 'EXPLAIN';
                         explain.classList.add(csscls('explain-query'));
+                        let armed = false;
                         explain.addEventListener('click', (event) => {
                             event.stopPropagation();
                             const config = window.phpdebugbar_explain;
@@ -730,18 +749,35 @@
                                 explain.textContent = 'Unavailable';
                                 return;
                             }
+                            if (!armed) {
+                                armed = true;
+                                explain.textContent = 'Confirm EXPLAIN?';
+                                window.setTimeout(() => { armed = false; explain.textContent = 'EXPLAIN'; }, 4000);
+                                return;
+                            }
+                            armed = false;
+                            if (explain.disabled) { return; }
                             explain.disabled = true;
                             explain.textContent = 'Running…';
                             contextTable.hidden = false;
-                            const body = new URLSearchParams({
-                                DEBUGBAR_EXPLAIN_REQUEST: config.token,
-                                sql: String(value.context.sql)
-                            });
-                            fetch(config.url, {
-                                method: 'POST',
-                                credentials: 'same-origin',
-                                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                                body
+                            // The client never submits SQL: only the request id + a hash of
+                            // a statement the server itself recorded (see
+                            // DebugbarLogger::stashQueriesForExplain()/explain.php). The SQL
+                            // is trimmed/capped identically to the server-side stash key.
+                            const sql = String(value.context.sql).trim().slice(0, 4000);
+                            crypto.subtle.digest('SHA-256', new TextEncoder().encode(sql)).then((hashBuf) => {
+                                const hash = [...new Uint8Array(hashBuf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+                                const body = new URLSearchParams({
+                                    request_id: config.requestId,
+                                    sql_hash: hash,
+                                    token: config.token
+                                });
+                                return fetch(config.url, {
+                                    method: 'POST',
+                                    credentials: 'same-origin',
+                                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                                    body
+                                });
                             }).then(async (response) => {
                                 const raw = await response.text();
                                 let data;

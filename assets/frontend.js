@@ -6,7 +6,8 @@
     if (script && script.dataset) {
         window.phpdebugbar_explain = {
             url: script.dataset.explainUrl || '',
-            token: script.dataset.explainToken || ''
+            token: script.dataset.explainToken || '',
+            requestId: script.dataset.explainRequestId || ''
         };
         profileConfig = {
             enabled: script.dataset.profileButton === '1',

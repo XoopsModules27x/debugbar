@@ -91,6 +91,43 @@ if ($action === 'set_debugbar') {
     exit;
 }
 
+if ($action === 'set_ray') {
+    if (! isset($GLOBALS['xoopsSecurity'])
+        || ! $GLOBALS['xoopsSecurity'] instanceof \XoopsSecurity
+        || ! $GLOBALS['xoopsSecurity']->check(true, false, 'DEBUGBAR_RAY_TOGGLE')) {
+        redirect_header('index.php', 3, _AM_DEBUGBAR_RAY_BAD_TOKEN);
+        exit;
+    }
+
+    $module = $helper->getModule();
+    if (! $module instanceof \XoopsModule) {
+        redirect_header('index.php', 3, _AM_DEBUGBAR_RAY_FAILED);
+        exit;
+    }
+
+    /** @var \XoopsConfigHandler $configHandler */
+    $configHandler = xoops_getHandler('config');
+    $criteria = new \CriteriaCompo(new \Criteria('conf_name', 'ray_enable'));
+    $criteria->add(new \Criteria('conf_modid', (int) $module->getVar('mid')));
+    $configs = $configHandler->getConfigs($criteria);
+    $rayConfig = $configs[0] ?? null;
+    if (! $rayConfig instanceof \XoopsConfigItem) {
+        redirect_header('index.php', 3, _AM_DEBUGBAR_RAY_FAILED);
+        exit;
+    }
+
+    $enabled = Request::getInt('enabled', 0, 'POST') === 1;
+    $rayValue = $enabled ? 1 : 0;
+    $rayConfig->setConfValueForInput($rayValue);
+    if (! $configHandler->insertConfig($rayConfig)) {
+        redirect_header('index.php', 3, _AM_DEBUGBAR_RAY_FAILED);
+        exit;
+    }
+
+    redirect_header('index.php', 2, $enabled ? _AM_DEBUGBAR_RAY_ENABLED_MSG : _AM_DEBUGBAR_RAY_DISABLED_MSG);
+    exit;
+}
+
 if ($action === 'set_tracy') {
     if (! isset($GLOBALS['xoopsSecurity'])
         || ! $GLOBALS['xoopsSecurity'] instanceof \XoopsSecurity
@@ -155,7 +192,11 @@ if ($hasMonolog) {
 $assetsDir = XOOPS_ROOT_PATH . '/modules/debugbar/assets';
 $assetFiles = \glob($assetsDir . '/*');
 $assetsExist = \is_dir($assetsDir) && \is_array($assetFiles) && \count($assetFiles) > 0;
-$hasRay = \function_exists('ray');
+// Ray is a 3-state: not installed / installed but preference off / installed + on.
+$rayInstalled = \function_exists('ray')
+    || \class_exists('Spatie\\Ray\\Ray')
+    || \class_exists('Spatie\\GlobalRay\\GlobalRay');
+$rayActivated = $rayInstalled && (bool) $helper->getConfig('ray_enable', 0);
 $debugMode = (int) ($GLOBALS['xoopsConfig']['debug_mode'] ?? 0);
 $xoopsDebugEnabled = in_array($debugMode, [1, 2], true);
 $debugbarPreferenceEnabled = (bool) $helper->getConfig('debugbar_enable', 1);
@@ -168,7 +209,7 @@ $statusRows = [
     [_AM_DEBUGBAR_MONOLOG, $monologActive ? _AM_DEBUGBAR_REGISTERED : ($hasMonolog ? _AM_DEBUGBAR_INSTALLED_INACTIVE : _AM_DEBUGBAR_NOT_FOUND), $monologActive ? 'green' : ($hasMonolog ? 'orange' : 'red')],
     [_AM_DEBUGBAR_PHP_VERSION,  PHP_VERSION, 'green'],
     [_AM_DEBUGBAR_ASSETS,       $assetsExist ? _AM_DEBUGBAR_COPIED : _AM_DEBUGBAR_NOT_COPIED,   $assetsExist ? 'green' : 'orange'],
-    [_AM_DEBUGBAR_RAY,          $hasRay ? _AM_DEBUGBAR_AVAILABLE : _AM_DEBUGBAR_NOT_INSTALLED, $hasRay ? 'green' : 'gray'],
+    [_AM_DEBUGBAR_RAY,          $rayInstalled ? ($rayActivated ? _AM_DEBUGBAR_INSTALLED_ACTIVE : _AM_DEBUGBAR_INSTALLED_INACTIVE) : _AM_DEBUGBAR_NOT_INSTALLED, $rayInstalled ? ($rayActivated ? 'green' : 'orange') : 'gray'],
     [_AM_DEBUGBAR_XOOPS_DEBUG, $xoopsDebugEnabled ? _AM_DEBUGBAR_ENABLED : _AM_DEBUGBAR_DISABLED, $xoopsDebugEnabled ? 'green' : 'orange'],
     [_AM_DEBUGBAR_TOOLBAR, $debugbarToolbarActive ? _AM_DEBUGBAR_ENABLED : ($debugbarPreferenceEnabled ? _AM_DEBUGBAR_WAITING_FOR_XOOPS_DEBUG : _AM_DEBUGBAR_DISABLED), $debugbarToolbarActive ? 'green' : 'orange'],
 ];
@@ -230,6 +271,23 @@ if ($tracyControlAvailable) {
         . htmlspecialchars($tracyActive ? _AM_DEBUGBAR_TRACY_TURN_OFF : _AM_DEBUGBAR_TRACY_TURN_ON, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
         . '</button></form>';
     $adminObject->addInfoBoxLine($tracyHtml, $tracyActive ? 'success' : 'information');
+}
+
+// --- InfoBox: Ray integration control ---
+// Only shown when the Ray library is installed; the button then flips the
+// ray_enable preference on or off (the same value as the module Preferences,
+// reachable here in one click). Hidden entirely when Ray is not installed.
+if ($rayInstalled) {
+    $adminObject->addInfoBox(_AM_DEBUGBAR_RAY_CONTROL);
+    $rayHtml = '<p>' . htmlspecialchars(_AM_DEBUGBAR_RAY_DSC, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</p>'
+        . '<form method="post" action="index.php">'
+        . $GLOBALS['xoopsSecurity']->getTokenHTML('DEBUGBAR_RAY_TOGGLE')
+        . '<input type="hidden" name="action" value="set_ray">'
+        . '<input type="hidden" name="enabled" value="' . ($rayActivated ? '0' : '1') . '">'
+        . '<button class="formButton" type="submit">'
+        . htmlspecialchars($rayActivated ? _AM_DEBUGBAR_RAY_TURN_OFF : _AM_DEBUGBAR_RAY_TURN_ON, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+        . '</button></form>';
+    $adminObject->addInfoBoxLine($rayHtml, $rayActivated ? 'success' : 'information');
 }
 
 $adminObject->displayIndex();

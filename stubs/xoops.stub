@@ -227,6 +227,8 @@ namespace {
         public function check(bool $clearIfValid = true, bool $token = false, string $name = 'XOOPS_TOKEN'): bool {}
 
         public function getTokenHTML(string $name = 'XOOPS_TOKEN'): string {}
+
+        public function createToken(int $timeout = 0, string $name = 'XOOPS_TOKEN'): string {}
     }
 
     class XoopsLogger
@@ -262,7 +264,8 @@ namespace {
 
         public function addStylesheet(string $url): void {}
 
-        public function addScript(string $url): void {}
+        /** @param array<string, string> $attributes */
+        public function addScript(string $src = '', array $attributes = [], string $content = '', string $name = ''): void {}
     }
 
     class XoopsMonologLogger

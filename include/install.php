@@ -21,7 +21,6 @@ function xoops_module_install_debugbar($module)
 {
     $assetsReady = _debugbar_copy_assets();
     $tableReady = _debugbar_create_profiles_table();
-    _debugbar_ensure_explain_secret();
 
     return $assetsReady && $tableReady;
 }
@@ -37,28 +36,130 @@ function xoops_module_update_debugbar($module, $previousVersion)
 {
     $assetsReady = _debugbar_copy_assets();
     $tableReady = _debugbar_create_profiles_table();
-    _debugbar_ensure_explain_secret();
+    $vitalsReady = _debugbar_add_vitals_columns();
+    $indexReady = _debugbar_add_request_index();
+    $renameReady = _debugbar_rename_button_config();
 
-    return $assetsReady && $tableReady;
+    return $assetsReady && $tableReady && $vitalsReady && $indexReady && $renameReady;
 }
 
-/** Create the optional EXPLAIN signing key without making module setup fatal. */
-function _debugbar_ensure_explain_secret(): bool
+/**
+ * Idempotently add the Core Web Vitals columns (lcp_ms/inp_ms/cls) to an
+ * existing debugbar_profiles table. CREATE TABLE IF NOT EXISTS never alters an
+ * existing table, so upgrades from a pre-RUM version need this ALTER. Each
+ * column is added only when information_schema shows it absent.
+ */
+function _debugbar_add_vitals_columns(): bool
 {
-    require_once dirname(__DIR__) . '/class/ExplainSecretStore.php';
+    $db = $GLOBALS['xoopsDB'];
+    $table = $db->prefix('debugbar_profiles');
+    $columns = [
+        'lcp_ms' => 'DECIMAL(10,1) NULL DEFAULT NULL',
+        'inp_ms' => 'DECIMAL(10,1) NULL DEFAULT NULL',
+        'cls' => 'DECIMAL(6,4) NULL DEFAULT NULL',
+    ];
 
     try {
-        $ready = (new \XoopsModules\Debugbar\ExplainSecretStore())->ensure();
-    } catch (\Throwable $exception) {
-        trigger_error('DebugBar EXPLAIN signing key setup failed: ' . $exception->getMessage(), E_USER_WARNING);
+        foreach ($columns as $name => $definition) {
+            $result = $db->query(sprintf(
+                'SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s AND COLUMN_NAME = %s',
+                $db->quote($table),
+                $db->quote($name)
+            ));
+            if (! $db->isResultSet($result) || ! $result instanceof \mysqli_result) {
+                return false;
+            }
+            $present = false !== $db->fetchRow($result);
+            if (! $present) {
+                $db->exec(sprintf('ALTER TABLE %s ADD COLUMN %s %s', $table, $name, $definition));
+            }
+        }
+
+        return true;
+    } catch (\Throwable $e) {
+        trigger_error('DebugBar vitals column migration failed: ' . $e->getMessage(), E_USER_WARNING);
 
         return false;
     }
-    if (! $ready) {
-        trigger_error('DebugBar EXPLAIN signing key is unavailable; EXPLAIN actions remain disabled.', E_USER_WARNING);
-    }
+}
 
-    return $ready;
+/**
+ * Idempotently add the request_id index to an existing debugbar_profiles table.
+ * updateVitals() looks a profile up by request_id on every RUM beacon, which is
+ * once per page view; without this index that is a scan of the whole retained
+ * table. CREATE TABLE IF NOT EXISTS never alters an existing table, so upgrades
+ * need this ALTER. Added only when information_schema shows the index absent.
+ */
+function _debugbar_add_request_index(): bool
+{
+    $db = $GLOBALS['xoopsDB'];
+    $table = $db->prefix('debugbar_profiles');
+
+    try {
+        $result = $db->query(sprintf(
+            'SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s AND INDEX_NAME = %s',
+            $db->quote($table),
+            $db->quote('idx_request')
+        ));
+        if (! $db->isResultSet($result) || ! $result instanceof \mysqli_result) {
+            return false;
+        }
+        if (false === $db->fetchRow($result)) {
+            $db->exec(sprintf('ALTER TABLE %s ADD INDEX idx_request (request_id)', $table));
+        }
+
+        return true;
+    } catch (\Throwable $e) {
+        trigger_error('DebugBar request index migration failed: ' . $e->getMessage(), E_USER_WARNING);
+
+        return false;
+    }
+}
+
+/**
+ * Rename the legacy profile_button_enable preference to xdebug_button_enable
+ * in place, preserving the stored value, so the button toggle keeps working
+ * across the config-key rename (matches the main tree's vocabulary). Idempotent:
+ * only acts when the old key still exists and the new one does not.
+ */
+function _debugbar_rename_button_config(): bool
+{
+    $db = $GLOBALS['xoopsDB'];
+    $moduleHandler = xoops_getHandler('module');
+    $module = $moduleHandler->getByDirname('debugbar');
+    if (! $module instanceof \XoopsModule) {
+        return false;
+    }
+    $mid = (int) $module->getVar('mid');
+    $table = $db->prefix('config');
+
+    try {
+        $result = $db->query(sprintf(
+            "SELECT conf_name FROM %s WHERE conf_modid = %u AND conf_name IN ('profile_button_enable', 'xdebug_button_enable')",
+            $table,
+            $mid
+        ));
+        if (! $db->isResultSet($result) || ! $result instanceof \mysqli_result) {
+            return false;
+        }
+        $present = [];
+        while (false !== ($row = $db->fetchArray($result))) {
+            $present[(string) $row['conf_name']] = true;
+        }
+        if (isset($present['profile_button_enable']) && ! isset($present['xdebug_button_enable'])) {
+            $db->exec(sprintf(
+                "UPDATE %s SET conf_name = 'xdebug_button_enable' WHERE conf_modid = %u AND conf_name = 'profile_button_enable'",
+                $table,
+                $mid
+            ));
+        }
+
+        return true;
+    } catch (\Throwable $e) {
+        trigger_error('DebugBar button-config rename failed: ' . $e->getMessage(), E_USER_WARNING);
+
+        return false;
+    }
 }
 
 function _debugbar_create_profiles_table(): bool
@@ -74,8 +175,11 @@ function _debugbar_create_profiles_table(): bool
         query_ms DECIMAL(10,1) NOT NULL DEFAULT 0, slowest_ms DECIMAL(10,1) NOT NULL DEFAULT 0,
         slowest_fp VARCHAR(255) NOT NULL DEFAULT \'\', n_plus_one SMALLINT UNSIGNED NOT NULL DEFAULT 0,
         peak_mem_kb INT UNSIGNED NOT NULL DEFAULT 0, payload_bytes INT UNSIGNED NOT NULL DEFAULT 0,
-        flags SMALLINT UNSIGNED NOT NULL DEFAULT 0, PRIMARY KEY (profile_id), KEY idx_created (created),
-        KEY idx_url_created (url_hash, created), KEY idx_dirname_created (dirname, created)
+        flags SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+        lcp_ms DECIMAL(10,1) NULL DEFAULT NULL, inp_ms DECIMAL(10,1) NULL DEFAULT NULL, cls DECIMAL(6,4) NULL DEFAULT NULL,
+        PRIMARY KEY (profile_id), KEY idx_created (created),
+        KEY idx_url_created (url_hash, created), KEY idx_dirname_created (dirname, created),
+        KEY idx_request (request_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci';
 
     try {

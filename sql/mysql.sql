@@ -8,6 +8,9 @@ CREATE TABLE debugbar_profiles (
     query_ms DECIMAL(10,1) NOT NULL DEFAULT 0, slowest_ms DECIMAL(10,1) NOT NULL DEFAULT 0,
     slowest_fp VARCHAR(255) NOT NULL DEFAULT '', n_plus_one SMALLINT UNSIGNED NOT NULL DEFAULT 0,
     peak_mem_kb INT UNSIGNED NOT NULL DEFAULT 0, payload_bytes INT UNSIGNED NOT NULL DEFAULT 0,
-    flags SMALLINT UNSIGNED NOT NULL DEFAULT 0, PRIMARY KEY (profile_id), KEY idx_created (created),
-    KEY idx_url_created (url_hash, created), KEY idx_dirname_created (dirname, created)
+    flags SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    lcp_ms DECIMAL(10,1) NULL DEFAULT NULL, inp_ms DECIMAL(10,1) NULL DEFAULT NULL, cls DECIMAL(6,4) NULL DEFAULT NULL,
+    PRIMARY KEY (profile_id), KEY idx_created (created),
+    KEY idx_url_created (url_hash, created), KEY idx_dirname_created (dirname, created),
+    KEY idx_request (request_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

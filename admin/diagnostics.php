@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use XoopsModules\Debugbar\Admin\AccessPolicy;
 use XoopsModules\Debugbar\Analysis\SystemDiagnostics;
 
 require_once __DIR__ . '/admin_header.php';
@@ -9,6 +10,14 @@ require_once __DIR__ . '/admin_header.php';
 $adminObject = \Xmf\Module\Admin::getInstance();
 
 xoops_cp_header();
+
+if (! AccessPolicy::isAllowed()) {
+    echo '<p style="color:#a00;font-weight:bold;">' . htmlspecialchars(_AM_DEBUGBAR_DIAG_FORBIDDEN, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</p>';
+    require_once __DIR__ . '/admin_footer.php';
+
+    return;
+}
+
 $adminObject->displayNavigation(basename(__FILE__));
 
 $esc = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -45,7 +54,7 @@ $labels = [
     'whoops' => _AM_DEBUGBAR_DIAG_WHOOPS,
     'ray' => _AM_DEBUGBAR_RAY,
     'tracy' => _AM_DEBUGBAR_DIAG_TRACY,
-    'explain_secret' => _AM_DEBUGBAR_DIAG_EXPLAIN_SECRET,
+    'explain_stash' => _AM_DEBUGBAR_DIAG_EXPLAIN_STASH,
     'logs' => _AM_DEBUGBAR_DIAG_LOG_DIR,
     'caches' => _AM_DEBUGBAR_DIAG_CACHE_DIR,
     'data' => _AM_DEBUGBAR_DIAG_DATA_DIR,
