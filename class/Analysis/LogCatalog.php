@@ -6,9 +6,28 @@ namespace XoopsModules\Debugbar\Analysis;
 
 final class LogCatalog
 {
+    /**
+     * Key for the plain-text XOOPS core debug log, used as both the `source` label and
+     * the `file` selector. Declared once so the catalog, the resolver and the viewer
+     * cannot drift apart.
+     */
+    public const SOURCE_CORE = 'core';
+
+    /**
+     * Filename the XOOPS 2.7.3 core file logger writes, relative to the logs directory.
+     * Fixed by convention rather than configurable: the core log has one standard
+     * location, so the viewer needs no setup to find it.
+     *
+     * debug.php does technically accept another plain "*.log" name. A site that renames
+     * its log will simply not see it listed here -- and one that renames it to
+     * "xoops.log" would see it listed as a MONOLOG file and parsed as JSON lines, because
+     * that name matches isMonologName(). Both are reasons to leave the name alone.
+     */
+    public const CORE_LOG_FILENAME = 'debug.log';
+
     public function __construct(
         private readonly string $monologDirectory,
-        private readonly ?string $legacyFile = null,
+        private readonly ?string $coreLogFile = null,
         private readonly int $maximumBytes = 262144
     ) {
     }
@@ -28,8 +47,12 @@ final class LogCatalog
                 $files[] = ['source' => 'monolog', 'file' => $name, 'modified' => (int) filemtime($path), 'size' => (int) filesize($path)];
             }
         }
-        if ($this->legacyFile !== null && is_file($this->legacyFile)) {
-            $files[] = ['source' => 'legacy', 'file' => 'legacy', 'modified' => (int) filemtime($this->legacyFile), 'size' => (int) filesize($this->legacyFile)];
+        // Resolved, not merely is_file()'d: listing an uncontained path would publish the
+        // size and mtime of whatever a symlink points at, even though reading it is
+        // refused. Metadata leaks are still leaks.
+        $coreLog = $this->containedCoreLog();
+        if ($coreLog !== null) {
+            $files[] = ['source' => self::SOURCE_CORE, 'file' => self::SOURCE_CORE, 'modified' => (int) filemtime($coreLog), 'size' => (int) filesize($coreLog)];
         }
         usort($files, static fn (array $a, array $b): int => $b['modified'] <=> $a['modified']);
 
@@ -61,10 +84,38 @@ final class LogCatalog
         }
     }
 
+    /**
+     * The core log path, but only if it really sits inside the log directory.
+     *
+     * One place, used by BOTH listFiles() and resolve(): containment applied on the read
+     * path alone still let the listing publish the size and mtime of whatever a planted
+     * symlink pointed at. The path is built by the caller rather than taken from the
+     * request, so none of this is reachable from a browser -- but the core file logger
+     * refuses to WRITE through a symlink for the same reason, and the reader should not
+     * be more trusting than the writer.
+     *
+     * @return string|null resolved real path, or null when absent or out of bounds
+     */
+    private function containedCoreLog(): ?string
+    {
+        if ($this->coreLogFile === null || ! is_file($this->coreLogFile)) {
+            return null;
+        }
+        $real = realpath($this->coreLogFile);
+        if ($real === false) {
+            return null;
+        }
+        $directory = $this->monologDirectory === '' ? false : realpath($this->monologDirectory);
+
+        return $directory !== false && str_starts_with($real, $directory . DIRECTORY_SEPARATOR)
+            ? $real
+            : null;
+    }
+
     private function resolve(string $file): ?string
     {
-        if ($file === 'legacy') {
-            return $this->legacyFile !== null && is_file($this->legacyFile) ? $this->legacyFile : null;
+        if ($file === self::SOURCE_CORE) {
+            return $this->containedCoreLog();
         }
         if ($file !== basename($file)) {
             return null;

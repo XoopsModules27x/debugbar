@@ -152,7 +152,7 @@ The stored URL is reduced to its path, so query-string secrets are not used as t
 
 Open **DebugBar > Logs** to see the allowlisted XOOPS log files.
 
-- The legacy XOOPS log is shown as a bounded raw tail.
+- The XOOPS core debug log (logs/debug.log in the configured data directory) is shown as a bounded raw tail.
 - Monolog files named `xoops.log` or `xoops-YYYY-MM-DD.log` are parsed into time, level, description, channel, location, and structured details.
 - At most the last 256 KB of a selected file is read.
 - Parsed Monolog entries are displayed newest first.

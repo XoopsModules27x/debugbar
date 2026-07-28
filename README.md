@@ -52,7 +52,7 @@ Displays stored request profiles, slow URLs, N+1 candidates, per-module comparis
 
 ### Logs
 
-Provides a protected, bounded tail viewer for the XOOPS legacy log and optional Monolog files. Structured Monolog context is formatted and secrets are redacted by the logger integration.
+Provides a protected, bounded tail viewer for the XOOPS core debug log and optional Monolog files. Structured Monolog context is formatted and secrets are redacted by the logger integration.
 
 ### Diagnostics
 

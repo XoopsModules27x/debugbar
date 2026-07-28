@@ -13,24 +13,28 @@ if (! defined('XOOPS_ROOT_PATH')) {
 
 final class LogCatalogTest extends TestCase
 {
-    public function testEmptyMonologDirectoryDoesNotHideLegacyLogOrResolveRootFiles(): void
+    public function testEmptyMonologDirectoryDoesNotHideCoreLogOrResolveRootFiles(): void
     {
         $directory = sys_get_temp_dir() . '/debugbar-log-catalog-' . bin2hex(random_bytes(6));
         self::assertTrue(mkdir($directory));
-        $legacyFile = $directory . '/log.txt';
-        self::assertNotFalse(file_put_contents($legacyFile, "legacy entry\n"));
+        // The 2.7.3 core file logger writes debug.log. This slot used to hold the
+        // pre-2.7.3 /log/log.txt that it replaced.
+        $coreLogFile = $directory . '/debug.log';
+        self::assertNotFalse(file_put_contents($coreLogFile, "core entry\n"));
 
         try {
-            $catalog = new LogCatalog($directory, $legacyFile);
+            $catalog = new LogCatalog($directory, $coreLogFile);
             $files = $catalog->listFiles();
 
             self::assertCount(1, $files);
-            self::assertSame('legacy', $files[0]['source']);
-            self::assertSame("legacy entry\n", $catalog->read('legacy'));
+            self::assertSame('core', $files[0]['source']);
+            self::assertSame("core entry\n", $catalog->read('core'));
             self::assertNull($catalog->read('xoops.log'));
+            // The retired key must not still resolve.
+            self::assertNull($catalog->read('legacy'));
         } finally {
-            if (is_file($legacyFile)) {
-                self::assertTrue(unlink($legacyFile));
+            if (is_file($coreLogFile)) {
+                self::assertTrue(unlink($coreLogFile));
             }
             if (is_dir($directory)) {
                 self::assertTrue(rmdir($directory));

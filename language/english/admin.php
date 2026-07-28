@@ -88,7 +88,7 @@ declare(strict_types=1);
 \define('_AM_DEBUGBAR_AN_CG_BAD_TOKEN', 'The security token expired. No files were deleted.');
 
 \define('_AM_DEBUGBAR_LOGS_TITLE', 'XOOPS logs');
-\define('_AM_DEBUGBAR_LOGS_DESCRIPTION', 'Monolog files are stored outside the web root. The legacy XOOPS log is also shown for migration and troubleshooting.');
+\define('_AM_DEBUGBAR_LOGS_DESCRIPTION', 'Monolog files are stored outside the web root. The XOOPS core debug log (logs/debug.log inside the configured XOOPS data directory, switched on in its data/debug.php) is also shown when present, as plain text.');
 \define('_AM_DEBUGBAR_LOGS_EMPTY', 'No readable XOOPS log files were found.');
 \define('_AM_DEBUGBAR_LOGS_FILE', 'Log file');
 \define('_AM_DEBUGBAR_LOGS_SOURCE', 'Source');
