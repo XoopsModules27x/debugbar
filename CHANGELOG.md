@@ -4,6 +4,17 @@ All notable changes to the XOOPS DebugBar module are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses semantic versioning.
 
+## [1.3.3] - 2026-07-28
+
+### Fixed
+
+- Pointed the Logs viewer at the XOOPS 2.7.3 core debug log (`xoops_data/logs/debug.log`). It still pointed at the pre-2.7.3 `/log/log.txt`, which no longer exists, so the plain-text log was simply never listed.
+
+### Changed
+
+- Renamed the plain-text log source from `legacy` to `core`, so the Source column describes the current log rather than a retired one.
+- Rendered analytics and log timestamps through the site's configured date format and timezone instead of a hardcoded `Y-m-d H:i:s`.
+
 ## [1.3.2] - 2026-07-21
 
 ### Security
