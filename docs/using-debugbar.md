@@ -40,6 +40,8 @@ The following settings are a practical starting point:
 | Maximum stored profiles | 10000 | Adds a hard storage limit. |
 | Enable Monolog file logging | Yes | Adds structured file logs when Monolog is available. |
 | Collect browser web-vitals (RUM beacon) | Yes | Reports LCP, INP, and CLS from real administrator sessions, which is the only way to see slowness the server does not cause. |
+| Collect preload events | No; Yes while chasing a preload or bootstrap problem | Adds the Events tab. Cheap to run, but it is diagnostic detail you only need while looking for it. |
+| Collect template resolution | No; Yes while working on themes or overrides | Adds the Templates tab. Turn it on for the one question it answers — which file served which template — then turn it off. |
 
 Set unused performance budgets to `0` to disable those checks. On a busy or production site, turn off XOOPS Debug when the investigation is finished.
 
@@ -172,6 +174,28 @@ This one is not a collector — it sits at the right-hand end of the toolbar, be
 **Show:** uncaught and caught exceptions with their traces, and deprecation notices raised during the request.
 
 **What to do with them:** treat Deprecated as an upgrade to-do list. Each entry names an API that still works today and will not after the next major PHP or XOOPS release, with the file and line that calls it. Fixing them while they are notices is far cheaper than fixing them when they become fatals.
+
+### Events
+
+![The Events collector listing XOOPS preload events in dispatch order, each with a listener count and duration, including several reported as having no listeners.](images/t11-events.png)
+
+**Shows:** every XOOPS preload event dispatched during the request, in order, with how many listeners each had and how long they took. Events that nothing listened to are listed too, which is the point — from outside, "my hook never ran" and "the event never fired" look identical, and only one of those two is your bug. Enable it with the **Collect preload events** preference; up to 300 dispatches are recorded.
+
+**What to do with it:** preloads are the invisible layer of a XOOPS site. A third-party module hooking an early event can slow or break every page with nothing on screen naming it, and this is the panel that names it.
+
+Read the durations first. In the capture above, `core.include.common.end` carries 15 listeners and 166ms — on a request that spent well under a second in PHP, that one event is most of the bootstrap, and the modules registering those listeners are where to look before touching anything else. Then read the zeroes: if you have written a preload and its event shows *no listeners*, the event is firing and your class is not attached, which is usually a naming mistake rather than a logic one. XOOPS builds the expected class name from the module directory and the preload file name, so an unexpected character in either produces a listener that silently never registers.
+
+### Templates
+
+![The Templates collector listing ten templates, each labelled theme override or module file with its path, several with a multiplier showing repeated renders, including system_block_dummy.tpl rendered sixteen times.](images/t12-templates.png)
+
+**Shows:** every template rendered for the page, where it was actually served from — theme override, module file, or the database — its path, and a `×n` multiplier when the same template was rendered more than once. Enable it with the **Collect template resolution** preference; up to 300 templates are recorded.
+
+**What to do with it:** settle "is my override actually being used?" without guessing. This is the most common XOOPS support question, and until now the toolbar could not answer it: the Smarty panel below shows the *variables* a template received, not which file supplied the template. If you copied a template into your theme and the page has not changed, this panel tells you in one line whether XOOPS is reading your copy or still reading the module's.
+
+The origin is verified rather than inferred — a file is named only when its size and modification time both match the bytes actually rendered — so a stale copy in the right place is not mistaken for the live one. Where two candidates are genuinely indistinguishable the panel says `ambiguous` and names both, which is a more honest answer than a coin toss.
+
+The multipliers are the second thing to read. In the capture above `system_block_dummy.tpl` renders sixteen times in one request, and `publisher_items_recent.tpl` and `newbb_block.tpl` four times each. Repeated renders are usually repeated blocks, so this pairs directly with the Blocks panel: a template rendered sixteen times with block caching off is sixteen block renders, each with its own queries, on every page view.
 
 ### Smarty
 
@@ -367,9 +391,11 @@ Cross-reference with **Logs**. Match the Monolog entry's timestamp and source lo
 
 Enable **Smarty Debug** temporarily and open the **Smarty** collector on the affected page. Confirm the actual variable name, type, and structure before editing a template — most “missing content” is a template reading a variable that was never assigned, or assuming an array where a scalar was passed. Remember the `<{ ... }>` delimiters.
 
-If the variable exists and is correct, the template you are editing is probably not the one being used. Enable **Included Files** temporarily and confirm which theme file and which override actually loaded. **Diagnostics** verifies the configured theme directories and entry files independently.
+If the variable exists and is correct, the template you are editing is probably not the one being used. Enable **Collect template resolution** and open the **Templates** tab: it names the file that served each template — your theme override, the module's own copy, or the database — so the question is answered in one line instead of inferred from a list of hundreds of included files. A template you have overridden that still reports `module file` means XOOPS never saw your copy, which is usually a wrong directory or a wrong filename rather than anything wrong with the template itself.
 
-Turn both preferences off afterwards. Smarty collection adds work on every request and exposes business data to any administrator; the included-files list can run to hundreds of entries.
+**Diagnostics** verifies the configured theme directories and entry files independently.
+
+Turn the preferences off afterwards. Smarty collection adds work on every request and exposes business data to any administrator, and template resolution is detail you only need while you are looking for it.
 
 ### “Where is the time going inside PHP?”
 
