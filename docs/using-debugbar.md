@@ -61,6 +61,8 @@ Start here when the whole page feels slow. The request summary includes:
 - a reproducible cURL command with sensitive values excluded;
 - a request ID that can be matched with stored diagnostic records.
 
+![The Request Summary panel of the toolbar, listing method, uri, script, id, user, uid, module, request_id, status, and duration for a single request.](images/01-toolbar-request-summary.png)
+
 The **Health** collector summarizes whether request time or memory exceeded the configured limits.
 
 ### Timeline and lifecycle
@@ -70,6 +72,10 @@ The timeline shows measured work such as XOOPS bootstrap, module initialization,
 - Is the delay in XOOPS startup or in the module itself?
 - Did a change speed up SQL but leave rendering slow?
 - Is a block or template responsible for most of the request?
+
+![The Timeline panel showing XOOPS at 5.93s, XOOPS Boot 113ms, Module init 353ms, XOOPS output init 3.61s, and Module display 746ms, with a measures list giving each as a percentage of the request.](images/07-toolbar-timeline.png)
+
+The example above is worth reading closely. Bootstrap is only 1.81% of the request and the module's own display is 11.99%, while **XOOPS output init** accounts for 58.07%. Neither the module nor the boot sequence is the problem on that page — theme and output construction is.
 
 Measure the same page before and after a change. A single request is useful for diagnosis; several comparable requests give a more reliable result.
 
@@ -138,6 +144,8 @@ Choose a 1-, 7-, or 30-day window and review:
 - OPcache health, including hit rate, memory, cached scripts, and restarts;
 - Xdebug cachegrind files when Xdebug profiling is configured, with a per-file breakdown of the most expensive functions by inclusive and self cost.
 
+![The Worst offenders table listing URL, module, hits, average and maximum milliseconds, average queries, worst N+1 count, and violations for the slowest URLs.](images/02a-analytics-worst-offenders.png)
+
 The stored URL is reduced to its path, so query-string secrets are not used as the Analytics identity. Profile storage is bounded by both retention days and maximum row count.
 
 ### A useful optimization loop
@@ -166,6 +174,8 @@ When enabled, the Monolog adapter is registered for site-wide XOOPS requests, no
 Structured fields are sanitized, but arbitrary preformatted message text cannot be guaranteed secret-free. Logs can contain operational or user-related context, so review and redact any excerpt before sharing it outside the administrator team.
 
 ## 6. Run Diagnostics before changing code
+
+![The Diagnostics page, grouped into Runtime, Themes, Diagnostic tools, and Writable storage, each row carrying an OK, INFO, or REVIEW status and a detail note.](images/11-diagnostics.png)
 
 Open **DebugBar > Diagnostics** for a read-only snapshot of:
 
@@ -203,6 +213,8 @@ A note on reading budget violations: every stored profile carries a set of flags
 
 ### “The site became slow after enabling a module”
 
+![The Per-module comparison table, with one row per module giving hits, average milliseconds, average queries, average payload, fragment hits, and violations.](images/02-analytics-per-module.png)
+
 **Decide whether the module is actually responsible.** Open **Analytics > Per-module comparison** over a 7-day window. The comparison shows average time, average queries, average payload, and violation counts per module, so a module that is merely *present* on slow pages is distinguishable from one that is *causing* them. If the suspect module's average request time is close to the site average, the problem is more likely a page that happens to include it.
 
 **Separate the kind of slowness.** Pick the module's worst URL, reproduce it as an administrator, and read two numbers off the request summary: total server time and SQL time.
@@ -228,6 +240,10 @@ Open **Analytics > Field web vitals** and read each row against the server time 
 | LCP acceptable, CLS high | Content is moving while it loads — usually images or ads without reserved dimensions. Nothing to do with PHP. |
 | LCP acceptable, INP high | The page paints quickly but responds slowly to input, which points at JavaScript on the main thread. |
 
+![The Field web-vitals table, listing per-URL sample counts, LCP, INP, CLS, and server milliseconds side by side.](images/05-analytics-field-web-vitals.png)
+
+Read the first two rows of that example together. `/modules/publisher/item.php` answers in 6.2 s on the server but records an LCP of 214 s, while `/search.php` answers in 15.4 s and records 199 s. In both cases the server is a small fraction of what the visitor actually waited for, and no amount of query tuning would have found that.
+
 LCP is colored against the usual 2.5 s / 4 s thresholds. Note that these are *field* measurements from real administrator sessions on real connections, which is why they can be far worse than anything you observe locally.
 
 ### “A plugin stopped working after I changed themes”
@@ -252,6 +268,10 @@ The fix is on the endpoint side: return early, before theme rendering, and emit 
 
 **Find the pages, not the queries, first.** Open **Analytics > N+1 leaderboard**. It groups queries by fingerprint — the statement with its literal values normalized away — so a query executed 200 times with 200 different ids appears as one entry with a count, rather than as 200 unrelated statements.
 
+![The N+1 leaderboard, grouping queries by normalized fingerprint with hits, worst repeat count, average queries, and a sample fingerprint per URL.](images/03-analytics-nplus1-leaderboard.png)
+
+The value of the fingerprint column is visible in that example: a single `SELECT * FROM ..._group_permission WHERE gperm_name = ? AND gperm_groupid IN (?+)` is shown once with a worst repeat of 71, rather than as 71 statements that happen to differ by id.
+
 **Reproduce with full logging, briefly.** Set Query Logging to **All queries**, reload the worst URL once, and set it straight back to **Slow & errors only**. In the **Queries** collector the repeats are marked `DUP` with an execution count.
 
 **Confirm the shape.** An N+1 looks like one query that loads a list, followed by many near-identical queries that differ only in an id. The fix is a join, a bulk `IN (...)` lookup, or preloading through the handler — not caching the symptom.
@@ -265,6 +285,10 @@ If **Recent budget violations** shows `query-errors`, stop and read those first.
 Intermittent faults are rarely reproducible on demand, so collect rather than chase.
 
 Set a realistic budget — request time or query count — so that a bad request records itself. When a budget is crossed, the **flight recorder** writes a bounded JSON record containing the request metrics, the decoded flags, the findings, the N+1 groups, and the slow queries for that request. Open **Analytics > Flight recorder** afterwards and read the record for the failure, rather than trying to reproduce it live.
+
+![The Recent budget violations table, listing time, URL, module, total milliseconds, query count, and the names of the budgets each request violated.](images/06-analytics-violations.png)
+
+![The Flight recorder table, listing time, violation status, request id, and dump size, with a View link per record.](images/10-flight-recorder.png)
 
 Cross-reference with **Logs**. Match the Monolog entry's timestamp and source location with the flight record's request id. Common causes that show up this way are cache-directory permissions that fail only for some users, a remote call that times out under load, and errors raised after a redirect has already been issued — which is exactly the case where nothing appears on screen.
 
@@ -285,7 +309,15 @@ Configure Xdebug for trigger-based profiling, then arm one capture with **Profil
 - **Inclusive** cost includes everything a function called. A high inclusive cost near the top of the stack tells you which subsystem is expensive.
 - **Self** cost excludes callees. A high self cost is the function actually burning the CPU.
 
+![The Xdebug profiles list, showing captured cachegrind files with their timestamp, filename, size in kilobytes, and View and Delete actions.](images/08a-analytics-xdebug-profiles.png)
+
+![The Top functions table for one profile, listing each function with its call count, self cost, self percentage, and inclusive cost.](images/08-cachegrind-top-functions.png)
+
+Both readings are visible in that example. `php::mysqli_query` has a self cost of 34.9 and an inclusive cost of 34.9 — identical, because it calls nothing else, so that time is genuinely spent in the database driver. `HTMLPurifier_ChildDef_Required->__construct` shows 17.9 self against 105.0 inclusive across 207 calls: the constructor itself is cheap and the expense is in what it triggers.
+
 A function with high inclusive and low self cost is a router, not a bottleneck — follow its callees. A function with high self cost and a large call count is usually the real answer, and is often something cheap being called far too often.
+
+If the header reports `too_large: file exceeds …` and Top functions is empty, the capture was bigger than the parser's size cap. Profile a narrower page, or open that file in QCacheGrind or KCacheGrind instead.
 
 Cachegrind files are large. Delete them individually when finished, or use **Purge files older than 30 days**.
 
@@ -297,7 +329,7 @@ When testing is complete:
 2. Turn off Ray, full query logging, Included Files, and unnecessary profiling options.
 3. Review retention and delete obsolete Xdebug profiles.
 4. Clear browser-local DebugBar history if it is no longer useful.
-5. Never publish screenshots or logs without reviewing request data and paths.
+5. Never publish screenshots or logs without reviewing request data and paths. The Request Summary panel names the signed-in administrator and their user id, Analytics lists real URL paths, and a cachegrind profile contains absolute filesystem paths. The screenshots in this guide were reviewed on that basis before being committed.
 
 Disabling the DebugBar preference does not enable or disable XOOPS Debug automatically. The two switches are intentionally separate so the administrator can use XOOPS debugging without the browser toolbar, or disable all diagnostic collection with the global XOOPS switch.
 

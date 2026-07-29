@@ -376,15 +376,17 @@ foreach ($data['cachegrind_files'] as $cgRow) {
         . '<button type="submit" class="formButton">' . $esc(_AM_DEBUGBAR_AN_DELETE) . '</button>'
         . '</form>';
     $rows[] = [
-        $esc(formatTimestamp($cgRow['mtime'], 'mysql')),
+        $esc(formatTimestamp((int) $cgRow['modified'], 'mysql')),
         $esc($cgRow['file']),
-        $esc(number_format($cgRow['bytes'] / 1024, 1)),
+        $esc(number_format($cgRow['size'] / 1024, 1)),
         '<a href="analytics.php?cg=' . $esc($encodedFile) . '">' . $esc(_AM_DEBUGBAR_AN_CG_VIEW) . '</a>',
         $deleteForm,
     ];
 }
+// The section already carries an <h3> above; passing a caption here too would
+// print the same heading twice.
 echo $table(
-    _AM_DEBUGBAR_AN_CG_SECTION,
+    '',
     [_AM_DEBUGBAR_AN_WHEN, _AM_DEBUGBAR_AN_CG_FILE, _AM_DEBUGBAR_AN_CG_SIZE, '', ''],
     $rows
 );
