@@ -745,3 +745,35 @@ div.phpdebugbar-mini-design a.phpdebugbar-tab {
 {
   margin: 0 5px;
 }
+
+/* -------------------------------------- */
+/* Mini (icon-only) toolbar: label the open collector                        */
+/*                                                                            */
+/* When the toolbar is too narrow for text, php-debugbar hides every tab      */
+/* label and reveals it only as a hover tooltip. That leaves nothing on       */
+/* screen saying which collector is currently open — the panel below shows    */
+/* rows of data with no heading, and the only clue is a highlighted icon.     */
+/* Keep the selected tab's label inline so the toolbar always names what you  */
+/* are looking at. The other tabs stay as icons, so little width is lost.     */
+/* The :hover selector is included so moving the pointer over the active tab  */
+/* does not turn its inline label back into a floating tooltip.               */
+
+div.phpdebugbar-mini-design a.phpdebugbar-tab.phpdebugbar-active span.phpdebugbar-text,
+div.phpdebugbar-mini-design a.phpdebugbar-tab.phpdebugbar-active:hover span.phpdebugbar-text {
+  display: inline-block;
+  position: static;
+  top: auto;
+  right: auto;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  padding: 0 2px 0 5px;
+  z-index: auto;
+  text-align: left;
+  white-space: nowrap;
+  opacity: 1;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}

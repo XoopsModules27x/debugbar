@@ -47,88 +47,129 @@ The **Bootstrap time budget** uses the measured `XOOPS Boot` lifecycle duration 
 
 ## 3. Read the browser toolbar
 
-Load the page you want to investigate and expand the toolbar at the bottom of the browser.
+Load the page you want to investigate and expand the toolbar at the bottom of the browser. Every collector below is one tab. On a narrow screen the tabs collapse to icons; the tab you are currently viewing keeps its name, so the toolbar always states which collector is open.
 
-### Request summary and health
+The examples in this section all come from one deliberately slow page — a Publisher article that crossed three configured budgets — so that each collector has something to show. Read them together: the point of the toolbar is that twenty collectors describe *the same request* from different angles, and the answer is usually where two of them disagree.
 
-Start here when the whole page feels slow. The request summary includes:
+### Messages
 
-- HTTP method, URI, status, and content type;
-- total server time and peak memory;
-- query and duplicate-query counts;
-- number of included PHP files;
-- compression and cache-header information;
-- a reproducible cURL command with sensitive values excluded;
-- a request ID that can be matched with stored diagnostic records.
+![The Messages collector listing four warnings: queries exceeded 104 > 30, SQL time exceeded 204.1 > 120, request time exceeded 4254 > 300, and Slow request 4.38 seconds.](images/t01-messages.png)
 
-![The Request Summary panel of the toolbar, listing method, uri, script, id, user, uid, module, request_id, status, and duration for a single request.](images/01-toolbar-request-summary.png)
+**Shows:** PHP and XOOPS diagnostic messages with severity — warnings, deprecations, caught exceptions, and DebugBar's own budget violations.
 
-The **Health** collector summarizes whether request time or memory exceeded the configured limits.
+**What to do with it:** start here. A page that crosses a budget says so in plain language, with the measured value and the limit it broke. The four lines above are the whole diagnosis in miniature: too many queries, and the SQL is not the reason the request was slow.
 
-### Timeline and lifecycle
+Each message expands to its full context:
 
-The timeline shows measured work such as XOOPS bootstrap, module initialization, output setup, module display, and total request time. Use it to answer questions such as:
+![The same warning expanded, showing Context with source, severity, a request array, and an environment array giving PHP 8.5.8, XOOPS 2.7.3-Beta1, and memory 20,480.0 KB.](images/t01b-messages-context.png)
 
-- Is the delay in XOOPS startup or in the module itself?
-- Did a change speed up SQL but leave rendering slow?
-- Is a block or template responsible for most of the request?
+That expansion is what makes a message actionable rather than merely informative — the request that produced it, the environment it ran in, and where the message came from. The **Copy details** button on each row copies it as text for a bug report.
 
-![The Timeline panel showing XOOPS at 5.93s, XOOPS Boot 113ms, Module init 353ms, XOOPS output init 3.61s, and Module display 746ms, with a measures list giving each as a percentage of the request.](images/07-toolbar-timeline.png)
+### Timeline
 
-The example above is worth reading closely. Bootstrap is only 1.81% of the request and the module's own display is 11.99%, while **XOOPS output init** accounts for 58.07%. Neither the module nor the boot sequence is the problem on that page — theme and output construction is.
+![The Timeline collector showing XOOPS 4.16s, XOOPS Boot 142ms, Module init 478ms, XOOPS output init 2.52s, Module display 553ms, and a measures list with percentages.](images/t02-timeline.png)
 
-Measure the same page before and after a change. A single request is useful for diagnosis; several comparable requests give a more reliable result.
+**Shows:** measured phases of the request as bars on a shared scale, then the same measures as percentages.
+
+**What to do with it:** decide *which layer* to investigate before touching any code. In the example, bootstrap is 3.11% and the module's own display is 12.1%, while **XOOPS output init takes 55.23%**. Optimizing the module would be wasted effort — the cost is in theme and output construction. This single reading redirects most performance work.
 
 ### Queries
 
-The Queries collector records SQL sent through the XOOPS logger.
+![The Queries collector showing two SELECT statements against xoops_group_permission, the second marked DUP x2.](images/t03-queries.png)
 
-- Slow queries are promoted to an error-level entry.
-- Repeated SQL is marked with `DUP` and an execution count.
-- Query time is shown separately from total request time.
-- With **Slow & errors only**, fast normal queries—including ordinary duplicate-query messages—are counted and included in aggregate analysis but not rendered as individual rows.
+**Shows:** SQL sent through the XOOPS logger, with duration, a `DUP×n` marker on repeated statements, and an **EXPLAIN** action on read-only statements.
 
-Repeated queries with the same shape often indicate an N+1 problem: code loads a list and then runs another query for every item. Replace that pattern with a join, a bulk lookup, or preloaded handler data.
+**What to do with it:** find repetition first, slowness second. Note what this panel is *not* telling you: only two rows appear because Query Logging is set to **Slow & errors only**, while Health below reports 108 queries for the same request. Fast queries are still counted and still analysed — they are simply not drawn. Switch to **All queries** for one reload when you need to see them all.
 
-An **EXPLAIN** action can appear beside a recorded read-only query. It is administrator-only, token-protected, and accepts only one `SELECT`, or a `WITH` query whose top-level statement is `SELECT`. Writable CTEs, stacked statements, and `INTO OUTFILE`/`INTO DUMPFILE` are rejected. Use its output to look for full table scans, temporary tables, filesorts, and missing indexes.
+### Blocks
 
-### Messages, exceptions, and deprecations
+![The Blocks collector listing seventeen blocks - User Menu, Search, Main Menu, Who is Online, and others - each reported as Not cached.](images/t04-blocks.png)
 
-These collectors show PHP and XOOPS diagnostic messages with severity, request context, source location, and a bounded trace when available. They are especially useful for:
+**Shows:** every block rendered for the page and whether it came from cache.
 
-- warnings that do not stop the page;
-- deprecated APIs that will become upgrade problems later;
-- caught exceptions that would otherwise be difficult to associate with a request;
-- errors that occur only with a particular module or theme.
+**What to do with it:** this is one of the highest-value collectors on a CMS and the most often ignored. Seventeen blocks, none cached, means seventeen block renders — each with its own queries — repeated on every page view. Blocks whose content changes rarely (menus, categories, "Who is Online") are usually safe to cache, and doing so often removes more request time than any code change.
 
-### Blocks and Smarty
+### Extra
 
-The Blocks collector reports block rendering and whether the result came from cache. The Smarty collector shows variables available after page rendering.
+![The Extra collector showing PHP version 8.5.8, Included files 579, MySQL version 9.7.0, Database Queries 104 with 11 duplicates, and Memory Usage.](images/t05-extra.png)
 
-For theme development, use Smarty data to confirm the actual variable name, type, and structure before changing a template. XOOPS templates use `<{ ... }>` delimiters.
+**Shows:** a compact environment and totals summary — PHP and MySQL versions, included file count, total and duplicate query counts, memory.
 
-Smarty values are recursively sanitized and bounded by depth, entry count, and string size before display. Do not leave Smarty collection enabled merely out of habit on a live site: even bounded collection adds work and may expose non-secret business data to administrators.
+**What to do with it:** sanity-check the environment you are actually running against before drawing conclusions, and get the true query total independently of what the Queries tab happens to be rendering.
+
+### Request details
+
+![The Request details collector showing method, query parameters, POST parameters, cookies, headers, locale, theme, and user.](images/t06-request-details.png)
+
+**Shows:** the inputs that produced this response — method, query and POST parameters, cookies, headers, active locale, active theme, and the signed-in user.
+
+**What to do with it:** answer "why did this page behave differently for me?" The theme and locale rows alone resolve a large share of "it looks wrong on my machine" reports. Values are sanitized and the arrays stay collapsed by default, so session and authentication cookies are not printed on screen unless you deliberately open them — bear that in mind before sharing a screenshot.
+
+### Performance
+
+![The Performance collector showing Flags queries, sql, request; Findings array 3; N+1 candidates array 1; Similar shapes array 3; Duplicate runtimes none.](images/t07-performance.png)
+
+**Shows:** DebugBar's own verdict on the request — which budget flags were raised, the findings behind them, N+1 candidates, similar query shapes, and duplicated JavaScript runtimes.
+
+**What to do with it:** this is the summary the stored profile keeps, so it is also what the Analytics violations feed and the flight recorder will show for this request. `N+1 candidates` lists exact repeats; `Similar shapes` lists parameterized statements with several distinct variants, which is the classic id-loop. `Duplicate runtimes: none` is a real result, not an empty panel — the page was scanned and no library was loaded twice.
+
+### Lifecycle
+
+![The Lifecycle collector listing XOOPS Boot 141.90 ms, Module init 477.84 ms, XOOPS output init 2521.68 ms, Module display 552.59 ms, XOOPS 4163.44 ms, and slowest XOOPS.](images/t08-lifecycle.png)
+
+**Shows:** the same phases as the Timeline, as exact figures rather than bars, plus which phase was slowest.
+
+**What to do with it:** use it when you are comparing two runs and need numbers you can subtract. The Timeline is for seeing the shape; Lifecycle is for recording the measurement.
+
+### Health
+
+![The Health collector showing request SLOW, memory OK, queries 108 total with 12 duplicate, and messages 3.](images/t09-health.png)
+
+**Shows:** a four-line verdict — was the request slow, was memory acceptable, how many queries ran and how many were duplicates, how many messages were raised.
+
+**What to do with it:** read it first and last. First, because it tells you in one glance whether this request is worth investigating. Last, because it is the honest total: the 108 queries here against the two rows drawn in the Queries tab is the difference between what was *measured* and what was *displayed*.
+
+### Frontend
+
+![The Frontend collector showing DOM interactive 4933.5 ms, transferred 54 KB, 64 resources, and five slow resource warnings naming specific JavaScript files with their timings.](images/t10-frontend.png)
+
+**Shows:** browser-side timings reported back by the page — DOM interactive, DOMContentLoaded, load event, bytes transferred, resource count, and the five slowest resources by name.
+
+**What to do with it:** separate a slow server from a slow page. When the server answered quickly but this panel shows a large DOM-interactive figure, the problem is in the browser and no PHP change will fix it. The named slow resources point straight at the offending files.
+
+### Exceptions and Deprecated
+
+**Show:** uncaught and caught exceptions with their traces, and deprecation notices raised during the request.
+
+**What to do with them:** treat Deprecated as an upgrade to-do list. Each entry names an API that still works today and will not after the next major PHP or XOOPS release, with the file and line that calls it. Fixing them while they are notices is far cheaper than fixing them when they become fatals.
+
+### Smarty
+
+**Shows:** the template variables available after rendering, recursively sanitized and bounded by depth, entry count, and string size.
+
+**What to do with it:** confirm the real variable name, type, and structure before editing a template — most "missing content" turns out to be a template reading a variable that was never assigned. Remember XOOPS uses `<{ ... }>` delimiters. Enable this preference only while working on templates: even bounded collection costs time on every request and exposes business data to any administrator.
+
+### Files
+
+**Shows:** every PHP file included during the request.
+
+**What to do with it:** identify which preload, override, library, or compatibility shim actually loaded — the reliable way to answer "is my override even being used?". Large installations load hundreds of files, so enable the preference only when you need it.
 
 ### Cache, HTTP, and Mail
 
-These collectors are populated when XOOPS or a module reports the corresponding operation:
+**Show:** cache reads, writes, hits and misses; outbound HTTP calls with status and timing; and outgoing mail with recipient, subject and transport — message bodies are removed.
 
-- **Cache** can show reads, writes, deletes, hits, misses, and backend summaries.
-- **HTTP** can show outbound method, URL, status, and timing metadata.
-- **Mail** can show recipient, subject, result, and transport metadata; message bodies are removed.
+**What to do with them:** an empty one of these means no compatible event was recorded during that request, not that the subsystem was unused. Not every module reports these operations yet, so treat a populated panel as a bonus rather than a guarantee.
 
-Not every module reports these operations yet. An empty collector means no compatible event was recorded during that request, not necessarily that the subsystem was unused.
+### Request Summary, Profiler, History
 
-### Frontend and History
+![The Request Summary collector listing method, uri, script, id, user, uid, module, request_id, and status for one request.](images/01-toolbar-request-summary.png)
 
-The browser-side Frontend collector reports navigation milestones, transferred bytes when available, resource count, and the five slowest browser resources. This helps distinguish a slow PHP response from slow images, scripts, fonts, or stylesheets.
+**Request Summary** gives the flat, copyable identity of the request — method, uri, script, request id, user, status, duration. The request id is the value that ties this page view to its stored profile, its flight-recorder dump, and its Monolog entries, so it is the field to quote in a bug report.
 
-The History collector keeps a maximum of ten small browser-local entries in `localStorage`. It contains the path, load time, and resource count—not request parameters—and can be cleared with the browser's site-data controls.
+**Profiler** exposes DebugBar's own measurements, which is how you confirm the toolbar itself is not what made the page slow.
 
-### Included files
-
-Enable this preference temporarily when you need to identify which preload, override, library, or compatibility file actually loaded. Disable it afterward because large installations can load hundreds of files.
-
+**History** keeps up to ten small browser-local entries in `localStorage` — path, load time, resource count, no request parameters. It is useful for spotting that a page became slower during your own session, and can be cleared with the browser's site-data controls.
 ## 4. Use Analytics for patterns, not isolated requests
 
 The toolbar explains one request. **DebugBar > Analytics** aggregates the compact profiles collected while administrators browse with debugging enabled.
