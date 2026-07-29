@@ -224,6 +224,31 @@ namespace {
         public function __construct() {}
     }
 
+    /**
+     * Mirrors class/preload.php as it really is: $_events is public and
+     * untyped, which is what lets PreloadEventSpy stand in for it. Do not
+     * "improve" these declarations — a typed property here would make the
+     * substitution look illegal to analysis while it stays legal at runtime.
+     */
+    class XoopsPreload
+    {
+        /** @var array<string, list<array{class_name: string, method: string}>> */
+        public $_preloads = [];
+
+        /**
+         * Deliberately left untyped, exactly as core declares it. Narrowing it
+         * to an array here would make PreloadEventSpy's substitution look
+         * illegal to analysis while remaining perfectly legal at runtime, and
+         * the whole Events collector depends on that being allowed.
+         */
+        public $_events = [];
+
+        public static function getInstance(): self {}
+
+        /** @param array<mixed> $args */
+        public function triggerEvent(string $event_name, $args = []) {}
+    }
+
     class XoopsSecurity
     {
         public function check(bool $clearIfValid = true, bool $token = false, string $name = 'XOOPS_TOKEN'): bool {}

@@ -16,6 +16,7 @@ declare(strict_types=1);
  * @package             debugbar
  */
 
+use XoopsModules\Debugbar\Collector\PreloadEventSpy;
 use XoopsModules\Debugbar\DebugbarLogger;
 use XoopsModules\Debugbar\RayLogger;
 
@@ -36,6 +37,9 @@ defined('XOOPS_ROOT_PATH') || exit('Restricted access');
  */
 class DebugbarCorePreload extends XoopsPreloadItem
 {
+    /** Watches the event table when collect_events is on; null when not installed. */
+    private static ?PreloadEventSpy $eventSpy = null;
+
     /**
      * core.include.common.start — earliest event in the bootstrap.
      *
@@ -62,6 +66,16 @@ class DebugbarCorePreload extends XoopsPreloadItem
             $logger->enable();
             $logger->startTime('XOOPS');
             $logger->startTime('XOOPS Boot');
+
+            // Watch the event table from here on. This is the earliest point at
+            // which it is fully populated (XoopsPreload's constructor calls
+            // setEvents() before dispatching this event), and events fired
+            // during the rest of the bootstrap — common.language among them —
+            // would otherwise be missed. Whether the admin actually wants them
+            // is not knowable yet: the config handlers do not exist this early,
+            // so the spy records unconditionally and common.end below either
+            // keeps it or puts the plain array back.
+            self::$eventSpy = PreloadEventSpy::install(self::preload());
 
             // Ray is intentionally NOT enabled here. Enabling it at common.start
             // (before authentication) let early bootstrap log/SQL entries reach
@@ -186,6 +200,15 @@ class DebugbarCorePreload extends XoopsPreloadItem
             xoops_loadLanguage('main', 'debugbar');
         }
 
+        // The config handlers exist by now, so the spy installed at
+        // common.start can finally be judged. Uninstalling puts the plain array
+        // back, which is the state every request should end in unless an admin
+        // asked for events.
+        if (null !== self::$eventSpy && (! $logger->isEnabled() || ! self::configEnabled('collect_events'))) {
+            self::$eventSpy->uninstall(self::preload());
+            self::$eventSpy = null;
+        }
+
         $logger->stopTime('XOOPS Boot');
         $logger->startTime('Module init');
     }
@@ -269,6 +292,16 @@ class DebugbarCorePreload extends XoopsPreloadItem
         if (is_array($moduleConfig) && isset($moduleConfig['debug_files_enable'])) {
             $logger->setShowIncludedFiles((bool) $moduleConfig['debug_files_enable']);
         }
+
+        // Flush the observed dispatches into the Events collector. Done here
+        // rather than at footer.end so the two footer events themselves are
+        // still reported; anything after this point is not, which is the price
+        // of reading a list while it is still being appended to.
+        if (null !== self::$eventSpy) {
+            $logger->recordEvents(self::$eventSpy->records(), self::$eventSpy->dropped());
+            self::$eventSpy->uninstall(self::preload());
+            self::$eventSpy = null;
+        }
     }
 
     /**
@@ -337,6 +370,23 @@ class DebugbarCorePreload extends XoopsPreloadItem
     /**
      * Helper: get the debugbar module configuration.
      *
+     * @return array<string, mixed>|false
+     */
+    /** The live XoopsPreload singleton whose event table the spy stands in for. */
+    private static function preload(): \XoopsPreload
+    {
+        return \XoopsPreload::getInstance();
+    }
+
+    /** True when a boolean module preference is present and switched on. */
+    private static function configEnabled(string $key): bool
+    {
+        $config = self::getModuleConfig();
+
+        return is_array($config) && isset($config[$key]) && (bool) $config[$key];
+    }
+
+    /**
      * @return array<string, mixed>|false
      */
     private static function getModuleConfig(): array|false

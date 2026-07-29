@@ -211,6 +211,7 @@ class DebugbarLogger
                 $this->debugbar->addCollector(new MessagesCollector('Cache'));
                 $this->debugbar->addCollector(new MessagesCollector('HTTP'));
                 $this->debugbar->addCollector(new MessagesCollector('Mail'));
+                $this->debugbar->addCollector(new MessagesCollector('Events'));
 
                 // Render structured message context client-side. This avoids
                 // embedding HTML dumps while preserving safe, expandable values.
@@ -611,6 +612,35 @@ class DebugbarLogger
             $this->cacheStats[$backend][$hit ? 'hits' : 'misses']++;
         }
         $this->recordMessage('Cache', sprintf('%s %s%s', strtoupper($operation), $key, $duration > 0 ? sprintf(' (%.2fms)', $duration * 1000) : ''), $hit === false ? LogLevel::WARNING : LogLevel::DEBUG);
+    }
+
+    /**
+     * Record the preload events dispatched during this request.
+     *
+     * @param list<array{name: string, listeners: int, ms: float}> $events  observed dispatches, in order
+     * @param int                                                  $dropped dispatches past the spy's cap
+     */
+    public function recordEvents(array $events, int $dropped = 0): void
+    {
+        foreach ($events as $event) {
+            // An event nobody listens to is the interesting case as often as
+            // not — "my hook never ran" looks identical to "the event never
+            // fired" from outside — so it is reported, not filtered out.
+            $this->recordMessage(
+                'Events',
+                sprintf(
+                    '%s — %s%s',
+                    $event['name'],
+                    0 === $event['listeners'] ? 'no listeners' : sprintf('%d listener%s', $event['listeners'], 1 === $event['listeners'] ? '' : 's'),
+                    $event['ms'] > 0.0 ? sprintf(' (%.2fms)', $event['ms']) : ''
+                ),
+                LogLevel::DEBUG,
+                $event
+            );
+        }
+        if ($dropped > 0) {
+            $this->recordMessage('Events', sprintf('%d further dispatches were not recorded (cap reached)', $dropped), LogLevel::WARNING);
+        }
     }
 
     /** Record an outbound HTTP request from a module or HTTP adapter. */
