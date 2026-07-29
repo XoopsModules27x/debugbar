@@ -36,8 +36,12 @@ define('_MD_DEBUGBAR_QUERY_SUMMARY', '%d queries');
 define('_MD_DEBUGBAR_QUERY_DUPLICATES', ' (%d duplicates)');
 define('_MD_DEBUGBAR_BYTES', '%s bytes');
 define('_MD_DEBUGBAR_DB_VERSION', '%s version');
-define('_MD_DEBUGBAR_PROFILE_REQUEST', 'Profile this request');
-define('_MD_DEBUGBAR_PROFILE_REQUEST_LOADING', 'Profiling…');
+// Xdebug one-shot profile trigger (assets/xoops-debugbar-xdebug.js)
+define('_MD_DEBUGBAR_XDEBUG_BUTTON', 'Profile this request');
+define('_MD_DEBUGBAR_XDEBUG_NOT_READY', 'Xdebug needs mode=profile and start_with_request=trigger set in php.ini (or the FPM pool config), followed by a web-server restart');
+define('_MD_DEBUGBAR_XDEBUG_ARMING', 'Arming...');
+define('_MD_DEBUGBAR_XDEBUG_CAPTURED', 'Profile captured');
+define('_MD_DEBUGBAR_XDEBUG_FAILED', 'Arming failed: no profile file was written');
 
 // Query error formatting
 define('_MD_DEBUGBAR_QUERY_ERROR', ' -- Error number: %s Error message: %s');

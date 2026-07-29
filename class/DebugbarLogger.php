@@ -125,9 +125,6 @@ class DebugbarLogger
     /** @var string CSRF token for on-demand query EXPLAIN requests. */
     private string $explainToken = '';
 
-    /** Show the opt-in one-shot Xdebug profiler control in the toolbar. */
-    private bool $profileButtonEnabled = false;
-
     /** @var array<string, array<string, mixed>> */
     private array $tags = [];
 
@@ -492,12 +489,6 @@ class DebugbarLogger
     public function setMemoryThreshold(int $bytes): void
     {
         $this->memoryThreshold = max(0, $bytes);
-    }
-
-    /** Enable the administrator-only toolbar control configured by the module preference. */
-    public function setProfileButtonEnabled(bool $enabled): void
-    {
-        $this->profileButtonEnabled = $enabled;
     }
 
     /** @return array<int,array<string,mixed>> */
@@ -1005,15 +996,14 @@ class DebugbarLogger
                     . $this->escapeAttribute($xoopsAssetsUrl . '/frontend.js') . '" data-explain-url="'
                     . $this->escapeAttribute($this->moduleUrl() . '/explain.php') . '" data-explain-token="'
                     . $this->escapeAttribute($explainToken) . '" data-explain-request-id="'
-                    . $this->escapeAttribute($explainRequestId) . '" data-profile-button="'
-                    . ($this->profileButtonEnabled ? '1' : '0') . '" data-profile-trigger="1" data-profile-label="'
-                    . $this->escapeAttribute(defined('_MD_DEBUGBAR_PROFILE_REQUEST') ? _MD_DEBUGBAR_PROFILE_REQUEST : 'Profile this request')
-                    . '" data-profile-loading-label="'
-                    . $this->escapeAttribute(defined('_MD_DEBUGBAR_PROFILE_REQUEST_LOADING') ? _MD_DEBUGBAR_PROFILE_REQUEST_LOADING : 'Profiling…')
-                    . '"></script>' . "\n";
+                    . $this->escapeAttribute($explainRequestId) . '"></script>' . "\n";
                 // Real User Monitoring: emit the web-vitals beacon loader
                 // (respects the rum_enable preference; empty for fragments).
                 $output .= \XoopsModules\Debugbar\Profiler::getInstance()->getRumHtml();
+                // Xdebug profile trigger: the button arms a one-shot capture
+                // through xdebug-arm.php rather than putting XDEBUG_TRIGGER in
+                // the URL (respects xdebug_button_enable; empty for fragments).
+                $output .= \XoopsModules\Debugbar\Profiler::getInstance()->getXdebugTriggerHtml();
             }
             $this->writeOutput($output);
         } else {

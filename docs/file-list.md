@@ -6,7 +6,7 @@ This inventory describes the standalone `modules/debugbar` release tree. The thr
 
 | Area | Files | Purpose |
 |---|---:|---|
-| Module root | 6 | Manifest, entry points, README, and changelog |
+| Module root | 7 | Manifest, entry points, README, and changelog |
 | Administration | 8 | Home, Analytics, Logs, Diagnostics, navigation, and wrappers |
 | PHP classes | 23 | Collection, profiling, storage, diagnostics, and optional Ray bridge |
 | Install and preload | 4 | Autoloading, lifecycle registration, schema/assets/key setup |
@@ -14,8 +14,8 @@ This inventory describes the standalone `modules/debugbar` release tree. The thr
 | Documentation shipped | 6 | Tutorials, Ray guide, credits, legacy notes, and this inventory |
 | SQL | 1 | Profile table definition |
 | Module asset overlay | 6 | XOOPS-specific styles and scripts reapplied during update |
-| Generated browser assets | 31 | Web-readable PHP DebugBar resources plus copied overlay files |
-| **Total** | **95** | Excludes the three review notes and repository tests outside the module tree |
+| Generated browser assets | 32 | Web-readable PHP DebugBar resources plus copied overlay files |
+| **Total** | **97** | Excludes the three review notes and repository tests outside the module tree |
 
 ## Module-owned source tree
 
@@ -26,6 +26,7 @@ debugbar/
 |-- xoops_version.php
 |-- index.php
 |-- explain.php
+|-- xdebug-arm.php
 |-- beacon.php
 |-- admin/
 |   |-- about.php

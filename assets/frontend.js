@@ -2,62 +2,17 @@
     'use strict';
 
     var script = document.currentScript;
-    var profileConfig = null;
     if (script && script.dataset) {
         window.phpdebugbar_explain = {
             url: script.dataset.explainUrl || '',
             token: script.dataset.explainToken || '',
             requestId: script.dataset.explainRequestId || ''
         };
-        profileConfig = {
-            enabled: script.dataset.profileButton === '1',
-            trigger: script.dataset.profileTrigger || '1',
-            label: script.dataset.profileLabel || 'Profile this request',
-            loadingLabel: script.dataset.profileLoadingLabel || 'Profiling…'
-        };
     }
 
-    function removeOneShotProfileTrigger() {
-        if (!window.URL || !window.history || !window.history.replaceState) {
-            return;
-        }
-        var url = new URL(window.location.href);
-        if (url.searchParams.get('_debugbar_profile_once') !== '1') {
-            return;
-        }
-        url.searchParams.delete('XDEBUG_TRIGGER');
-        url.searchParams.delete('_debugbar_profile_once');
-        window.history.replaceState(window.history.state, document.title, url.toString());
-    }
-
-    function addProfileButton() {
-        if (!profileConfig || !profileConfig.enabled || !window.URL) {
-            return;
-        }
-        var header = document.querySelector('div.phpdebugbar-header-right');
-        if (!header || header.querySelector('.phpdebugbar-profile-request')) {
-            return;
-        }
-
-        var button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'phpdebugbar-profile-request';
-        button.textContent = profileConfig.label;
-        button.title = profileConfig.label;
-        button.addEventListener('click', function () {
-            button.disabled = true;
-            button.setAttribute('aria-busy', 'true');
-            button.textContent = profileConfig.loadingLabel;
-
-            var url = new URL(window.location.href);
-            url.searchParams.set('XDEBUG_TRIGGER', profileConfig.trigger);
-            url.searchParams.set('_debugbar_profile_once', '1');
-            window.location.assign(url.toString());
-        });
-        header.insertBefore(button, header.firstChild);
-    }
-
-    removeOneShotProfileTrigger();
+    // The Xdebug profile button lives in assets/xoops-debugbar-xdebug.js: it
+    // arms a one-shot capture server-side through xdebug-arm.php instead of
+    // putting XDEBUG_TRIGGER into the URL.
 
     if (typeof phpdebugbar !== 'undefined' && typeof phpdebugbar._initSettings === 'function') {
         try {
@@ -133,8 +88,6 @@
         } catch (e) {
             // Frontend metrics are optional and must never affect the page.
         }
-
-        addProfileButton();
     }
 
     if (document.readyState === 'loading') {

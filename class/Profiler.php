@@ -8,8 +8,10 @@ use DebugBar\DataCollector\ConfigCollector;
 use Xmf\Request;
 use XoopsModules\Debugbar\Analysis\AssetScanner;
 use XoopsModules\Debugbar\Analysis\BudgetChecker;
+use XoopsModules\Debugbar\Analysis\CachegrindCatalog;
 use XoopsModules\Debugbar\Analysis\DiagnosticSanitizer;
 use XoopsModules\Debugbar\Analysis\QueryAnalyzer;
+use XoopsModules\Debugbar\Analysis\XdebugStatus;
 
 defined('XOOPS_ROOT_PATH') || exit('Restricted access');
 
@@ -20,6 +22,12 @@ final class Profiler
     private bool $finalized = false;
     private string $requestId;
     private ?DiagnosticSanitizer $diagnosticSanitizer = null;
+
+    /** Basename of this request's Xdebug cachegrind dump, if one was written. */
+    private ?string $profiledFile = null;
+
+    /** True when the XDEBUG_TRIGGER cookie was present but no profile resulted. */
+    private bool $armFailed = false;
 
     /** Max slowest SELECTs to run EXPLAIN on per request. */
     private const MAX_EXPLAIN = 3;
@@ -37,6 +45,85 @@ final class Profiler
     public function getRequestId(): string
     {
         return $this->requestId;
+    }
+
+    /**
+     * Xdebug profile trigger: emit the arming config and loader when the
+     * xdebug_button_enable preference is on. The client script posts to
+     * xdebug-arm.php, which sets a one-shot XDEBUG_TRIGGER cookie server-side
+     * after checking admin, debug mode, a CSRF token and Xdebug's own
+     * readiness. Nothing about the trigger travels in the URL. Never throws.
+     */
+    public function getXdebugTriggerHtml(): string
+    {
+        if ($this->isFragment()) {
+            return '';
+        }
+
+        try {
+            $config = DebugbarCoreConfig::get();
+            if (array_key_exists('xdebug_button_enable', $config) && ! (bool) $config['xdebug_button_enable']) {
+                return '';
+            }
+
+            $profiledFile = null !== $this->profiledFile && CachegrindCatalog::isValidFilename($this->profiledFile)
+                ? $this->profiledFile
+                : null;
+
+            $trigger = [
+                'armUrl' => XOOPS_URL . '/modules/debugbar/xdebug-arm.php',
+                'token' => $GLOBALS['xoopsSecurity']->createToken(0, 'DEBUGBAR_XDEBUG'),
+                'available' => (bool) (XdebugStatus::read()['can_trigger'] ?? false),
+                'profiledFile' => $profiledFile,
+                'armFailed' => $this->armFailed,
+                'analyticsUrl' => XOOPS_URL . '/modules/debugbar/admin/analytics.php',
+                'labels' => [
+                    'button' => $this->tr('_MD_DEBUGBAR_XDEBUG_BUTTON', 'Profile this request'),
+                    'notReady' => $this->tr('_MD_DEBUGBAR_XDEBUG_NOT_READY', 'Xdebug is not ready to trigger a profile'),
+                    'arming' => $this->tr('_MD_DEBUGBAR_XDEBUG_ARMING', 'Arming...'),
+                    'captured' => $this->tr('_MD_DEBUGBAR_XDEBUG_CAPTURED', 'Profile captured'),
+                    'failed' => $this->tr('_MD_DEBUGBAR_XDEBUG_FAILED', 'Failed to arm profile trigger'),
+                ],
+            ];
+
+            return '<script>window.XoopsDebugbarXdebug = ' . json_encode($trigger, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) . ';</script>' . "\n"
+                . '<script defer src="' . XOOPS_URL . '/modules/debugbar/assets/xoops-debugbar-xdebug.js"></script>' . "\n";
+        } catch (\Throwable $e) {
+            return '';
+        }
+    }
+
+    /**
+     * Detect and consume this request's Xdebug profile trigger. If the
+     * XDEBUG_TRIGGER cookie is present it is always deleted, whatever the
+     * outcome, so an arming can never persist past the one request it was
+     * meant for. Never throws.
+     */
+    private function detectXdebugProfile(): void
+    {
+        try {
+            if (\function_exists('xdebug_get_profiler_filename')) {
+                $file = @\xdebug_get_profiler_filename();
+                if (is_string($file) && '' !== $file) {
+                    $this->profiledFile = basename($file);
+                }
+            }
+
+            if (isset($_COOKIE['XDEBUG_TRIGGER']) && ! headers_sent()) {
+                xoops_setcookie('XDEBUG_TRIGGER', '', time() - 3600);
+                if (null === $this->profiledFile) {
+                    $this->armFailed = true;
+                }
+            }
+        } catch (\Throwable $e) {
+            // profile-trigger bookkeeping must never break the page
+        }
+    }
+
+    /** Language constant when the module's front-end strings are loaded, fallback otherwise. */
+    private function tr(string $constant, string $fallback): string
+    {
+        return defined($constant) ? (string) constant($constant) : $fallback;
     }
 
     /**
@@ -78,6 +165,10 @@ final class Profiler
             return;
         }
         $this->finalized = true;
+
+        // Consume the one-shot profile trigger before anything else, so the
+        // cookie is cleared even if the analysis below bails out.
+        $this->detectXdebugProfile();
 
         try {
             $debugbar = $logger->getDebugbar();

@@ -34,6 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Replaced the "Profile this request" mechanism. The button previously appended `XDEBUG_TRIGGER` to the current URL and reloaded, with no server-side gate at all: the resulting address was replayable by anyone and passed through browser history, `Referer` headers, and access logs before it was scrubbed. It now posts to a new `xdebug-arm.php`, which sets a 60-second one-shot trigger cookie only after checking POST, the shared `AccessPolicy` decision (module admin, debug mode, module enabled), a single-use `DEBUGBAR_XDEBUG` token, and Xdebug's own readiness. `Profiler` consumes and deletes the cookie on the next request whatever the outcome, reports the resulting cachegrind file, and says so when arming produced nothing. The `xdebug_button_enable` preference is unchanged, so no reconfiguration is needed.
 - Capped each query-findings list (slow queries, duplicates, N+1 groups, similar shapes) at ten entries. A page issuing thousands of queries previously emitted one entry per finding into the Performance panel, the flight-recorder dump, and the warning log. The reported counts remain exact.
 - Expanded the unit suite from 4 tests to 53 (214 assertions), covering the admin access policy, diagnostic sanitiser, SQL redactor and EXPLAIN stash redaction, Monolog log parsing and cataloguing, system diagnostics, endpoint gating, and profile-schema consistency between the DDL and the insert statement.
 

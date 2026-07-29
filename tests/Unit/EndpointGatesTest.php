@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace XoopsModules\Debugbar\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
+use XoopsModules\Debugbar\Admin\AccessPolicy;
 
 /**
  * explain.php / beacon.php are procedural entry scripts that `require
@@ -115,5 +116,54 @@ final class EndpointGatesTest extends TestCase
         $huge = str_repeat('x', 10000);
         $capped = substr($huge, 0, 4096);
         self::assertSame(4096, strlen($capped));
+    }
+
+    // --- xdebug-arm.php ------------------------------------------------
+    // Gates (in source order): POST only; AccessPolicy::isAllowed() (module
+    // admin AND debug_mode non-zero AND debugbar_enable) — deliberately the
+    // same decision object the admin pages use, so this endpoint cannot
+    // drift from them; xoopsSecurity->check(true, $token, 'DEBUGBAR_XDEBUG')
+    // — note `true`, so the token is SINGLE-USE and consumed on success,
+    // unlike the reusable DEBUGBAR_EXPLAIN token; and finally
+    // XdebugStatus::read()['can_trigger']. Only then is a 60-second
+    // XDEBUG_TRIGGER cookie set. The trigger value never travels in the URL,
+    // so it cannot leak through history, Referer headers, or access logs.
+
+    public function testXdebugArmGateIsTheSharedAccessPolicyDecision(): void
+    {
+        // Fails closed on every axis — mirrors AccessPolicy::evaluate().
+        self::assertTrue(AccessPolicy::evaluate(true, 1, true));
+        self::assertFalse(AccessPolicy::evaluate(false, 1, true), 'non-admin must be refused');
+        self::assertFalse(AccessPolicy::evaluate(true, 0, true), 'debug mode off must be refused');
+        self::assertFalse(AccessPolicy::evaluate(true, 1, false), 'module disabled must be refused');
+    }
+
+    public function testXdebugArmUsesASingleUseTokenUnlikeExplain(): void
+    {
+        // The distinction is the first argument to XoopsSecurity::check():
+        // true clears the token on a valid check, false leaves it reusable.
+        // Arming is one-shot, so its token must not be replayable; EXPLAIN
+        // may be invoked several times from one rendered page, so its is.
+        $armSource = file_get_contents(dirname(__DIR__, 2) . '/xdebug-arm.php');
+        $explainSource = file_get_contents(dirname(__DIR__, 2) . '/explain.php');
+
+        self::assertIsString($armSource);
+        self::assertIsString($explainSource);
+        self::assertStringContainsString("check(true, \$token, 'DEBUGBAR_XDEBUG')", $armSource);
+        self::assertStringContainsString("check(false, \$token, 'DEBUGBAR_EXPLAIN')", $explainSource);
+    }
+
+    public function testXdebugArmNeverPutsTheTriggerInAUrl(): void
+    {
+        // The whole point of the endpoint: the trigger is a server-set
+        // cookie. A regression that reintroduced a query-string trigger
+        // would leak it into history, Referer headers and access logs.
+        $armSource = file_get_contents(dirname(__DIR__, 2) . '/xdebug-arm.php');
+        $frontendSource = file_get_contents(dirname(__DIR__, 2) . '/assets/frontend.js');
+
+        self::assertIsString($armSource);
+        self::assertIsString($frontendSource);
+        self::assertStringContainsString('xoops_setcookie(\'XDEBUG_TRIGGER\'', $armSource);
+        self::assertStringNotContainsString('searchParams.set(\'XDEBUG_TRIGGER\'', $frontendSource);
     }
 }

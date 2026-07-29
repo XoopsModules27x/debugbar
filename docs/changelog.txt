@@ -24,6 +24,7 @@
 
 <h5>Changed</h5>
 
+- Replaced the "Profile this request" mechanism. The button previously appended XDEBUG_TRIGGER to the current URL and reloaded, with no server-side gate: the address was replayable by anyone and passed through history, Referer headers and access logs. It now posts to a new xdebug-arm.php, which sets a 60-second one-shot trigger cookie only after checking POST, the shared AccessPolicy decision, a single-use DEBUGBAR_XDEBUG token, and Xdebug's readiness. The cookie is consumed and deleted on the next request whatever the outcome. The xdebug_button_enable preference is unchanged.
 - Capped each query-findings list (slow queries, duplicates, N+1 groups, similar shapes) at ten entries. A page issuing thousands of queries previously emitted one entry per finding into the Performance panel, the flight-recorder dump, and the warning log. Reported counts remain exact.
 - Expanded the unit suite from 4 tests to 53 (214 assertions), covering the admin access policy, diagnostic sanitiser, SQL redactor and EXPLAIN stash redaction, Monolog log parsing and cataloguing, system diagnostics, endpoint gating, and profile-schema consistency.
 

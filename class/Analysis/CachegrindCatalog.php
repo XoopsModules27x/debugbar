@@ -132,7 +132,7 @@ final class CachegrindCatalog
         }
     }
 
-    private static function isValidFilename(string $filename): bool
+    public static function isValidFilename(string $filename): bool
     {
         return $filename === basename($filename)
             && ! str_contains($filename, '..')
