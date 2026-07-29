@@ -304,6 +304,59 @@ namespace {
     }
 
     function ray(mixed ...$arguments): \Spatie\Ray\Ray {}
+
+    /**
+     * Smarty 4.5.7, as shipped in xoops_lib. Only the parts TemplateResource
+     * builds on. Signatures are copied from the real library, untyped where the
+     * real ones are untyped — fetch() in particular takes its last two
+     * parameters by reference and declares no types, and the override in
+     * TemplateResource has to stay compatible with exactly that.
+     */
+    class Smarty
+    {
+        public function registerResource(string $name, \Smarty_Resource $resource_handler): static {}
+    }
+
+    class Smarty_Template_Source
+    {
+        public string $name;
+
+        public string $type;
+
+        public bool $exists;
+
+        /** @var int|false */
+        public $timestamp;
+    }
+
+    abstract class Smarty_Resource
+    {
+    }
+
+    abstract class Smarty_Resource_Custom extends \Smarty_Resource
+    {
+        /**
+         * Untyped on purpose, like the real library: Smarty_Resource_Db sets
+         * both by-ref parameters to null when stat() fails on the resolved
+         * file, so neither is guaranteed to be a string or an int on return.
+         *
+         * @param mixed $name
+         * @param mixed $source
+         * @param mixed $mtime
+         */
+        abstract protected function fetch($name, &$source, &$mtime);
+    }
+
+    /** htdocs/class/smarty3_plugins/resource.db.php */
+    class Smarty_Resource_Db extends \Smarty_Resource_Custom
+    {
+        /**
+         * @param mixed $name
+         * @param mixed $source
+         * @param mixed $mtime
+         */
+        protected function fetch($name, &$source, &$mtime) {}
+    }
 }
 
 namespace Xmf {

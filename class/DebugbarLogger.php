@@ -212,6 +212,7 @@ class DebugbarLogger
                 $this->debugbar->addCollector(new MessagesCollector('HTTP'));
                 $this->debugbar->addCollector(new MessagesCollector('Mail'));
                 $this->debugbar->addCollector(new MessagesCollector('Events'));
+                $this->debugbar->addCollector(new MessagesCollector('Templates'));
 
                 // Render structured message context client-side. This avoids
                 // embedding HTML dumps while preserving safe, expandable values.
@@ -640,6 +641,36 @@ class DebugbarLogger
         }
         if ($dropped > 0) {
             $this->recordMessage('Events', sprintf('%d further dispatches were not recorded (cap reached)', $dropped), LogLevel::WARNING);
+        }
+    }
+
+    /**
+     * Record the templates rendered during this request.
+     *
+     * @param list<array{name: string, source: string, path: string, renders: int, ms: float, bytes: int}> $templates rendered templates
+     * @param int                                                                                          $dropped   templates past the cap
+     */
+    public function recordTemplates(array $templates, int $dropped = 0): void
+    {
+        foreach ($templates as $template) {
+            // The source is the headline, not a detail: "is my override actually
+            // being used?" is the question this collector exists to answer, and
+            // it should be readable without expanding the row.
+            $this->recordMessage(
+                'Templates',
+                sprintf(
+                    '%s — %s%s%s',
+                    $template['name'],
+                    $template['source'],
+                    '' !== $template['path'] ? ' (' . $template['path'] . ')' : '',
+                    $template['renders'] > 1 ? sprintf(' ×%d', $template['renders']) : ''
+                ),
+                'not found' === $template['source'] ? LogLevel::WARNING : LogLevel::DEBUG,
+                $template
+            );
+        }
+        if ($dropped > 0) {
+            $this->recordMessage('Templates', sprintf('%d further templates were not recorded (cap reached)', $dropped), LogLevel::WARNING);
         }
     }
 

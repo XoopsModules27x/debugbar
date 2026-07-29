@@ -17,6 +17,7 @@ declare(strict_types=1);
  */
 
 use XoopsModules\Debugbar\Collector\PreloadEventSpy;
+use XoopsModules\Debugbar\Collector\TemplateResource;
 use XoopsModules\Debugbar\DebugbarLogger;
 use XoopsModules\Debugbar\RayLogger;
 
@@ -39,6 +40,9 @@ class DebugbarCorePreload extends XoopsPreloadItem
 {
     /** Watches the event table when collect_events is on; null when not installed. */
     private static ?PreloadEventSpy $eventSpy = null;
+
+    /** Observes template resolution when collect_templates is on; null when not installed. */
+    private static ?TemplateResource $templateResource = null;
 
     /**
      * core.include.common.start — earliest event in the bootstrap.
@@ -214,6 +218,54 @@ class DebugbarCorePreload extends XoopsPreloadItem
     }
 
     /**
+     * core.class.template.new — a XoopsTpl instance has just been constructed.
+     *
+     * Take over the `db:` resource so template resolution can be observed. This
+     * must happen here rather than later: Smarty caches the handler for a
+     * resource type the first time it loads one, and ignores a swap after that.
+     *
+     * @param array<int, mixed> $args event arguments; [0] is the XoopsTpl
+     * @return void
+     */
+    public static function eventCoreClassTemplateNew(array $args): void
+    {
+        // Runs for every XoopsTpl on every page. A throw here would take the
+        // site's rendering with it, so nothing in this method may escape.
+        try {
+            $tpl = $args[0] ?? null;
+            if (! $tpl instanceof \Smarty) {
+                return;
+            }
+            if (! DebugbarLogger::getInstance()->isEnabled() || ! self::configEnabled('collect_templates')) {
+                return;
+            }
+
+            // One resource instance for the whole request, shared across the
+            // several XoopsTpl instances a page builds (main, blocks, comments),
+            // so their renders land in one list.
+            if (null === self::$templateResource) {
+                // Smarty only autoloads this when the `db:` resource is first
+                // used, which is after the point we have to register — and our
+                // resource extends it, so it has to exist first.
+                if (! class_exists(\Smarty_Resource_Db::class, false)) {
+                    $coreResource = XOOPS_ROOT_PATH . '/class/smarty3_plugins/resource.db.php';
+                    if (! is_file($coreResource)) {
+                        // A core layout we do not recognise. Skip the collector
+                        // rather than fatal on a missing parent class.
+                        return;
+                    }
+                    require_once $coreResource;
+                }
+                self::$templateResource = new TemplateResource((string) ($GLOBALS['xoopsConfig']['theme_set'] ?? 'default'));
+            }
+            $tpl->registerResource('db', self::$templateResource);
+        } catch (\Throwable $e) {
+            self::$templateResource = null;
+            \trigger_error('debugbar preload (template.new) failed: ' . $e->getMessage(), \E_USER_WARNING);
+        }
+    }
+
+    /**
      * Add redacted DebugBar context to xWhoops without replacing its handler.
      * @param array<int, mixed> $args
      */
@@ -301,6 +353,10 @@ class DebugbarCorePreload extends XoopsPreloadItem
             $logger->recordEvents(self::$eventSpy->records(), self::$eventSpy->dropped());
             self::$eventSpy->uninstall(self::preload());
             self::$eventSpy = null;
+        }
+
+        if (null !== self::$templateResource) {
+            $logger->recordTemplates(self::$templateResource->records(), self::$templateResource->dropped());
         }
     }
 
