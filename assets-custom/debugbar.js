@@ -801,6 +801,20 @@ window.PhpDebugBar = window.PhpDebugBar || {};
                     this.setTheme('auto');
                 }
             });
+
+            // A site theme toggle usually only rewrites the attribute on <html>,
+            // without reloading, so watch for that too. Otherwise switching the
+            // page to dark leaves the toolbar light until the next page load.
+            if (typeof MutationObserver === 'function') {
+                new MutationObserver(() => {
+                    if (this.options.theme === 'auto') {
+                        this.setTheme('auto');
+                    }
+                }).observe(document.documentElement, {
+                    attributes: true,
+                    attributeFilter: ['data-bs-theme', 'data-theme']
+                });
+            }
         }
 
         /**
@@ -843,12 +857,33 @@ window.PhpDebugBar = window.PhpDebugBar || {};
             this.recomputeBottomOffset();
         }
 
+        /**
+         * Resolve what 'auto' means right now.
+         *
+         * The operating-system preference alone is not enough: a XOOPS theme
+         * switched to dark inside a light OS session left the toolbar bright
+         * white against a dark page. The surrounding document is asked first
+         * — themes on this line advertise their mode as data-bs-theme (the
+         * Bootstrap 5.3 convention) or data-theme on <html> — and the media
+         * query is the fallback for a theme that says nothing.
+         *
+         * @return {string} 'dark' or 'light'
+         */
+        resolveAutoTheme() {
+            const root = document.documentElement;
+            const declared = (root.getAttribute('data-bs-theme') || root.getAttribute('data-theme') || '').toLowerCase();
+            if (declared === 'dark' || declared === 'light') {
+                return declared;
+            }
+
+            return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+
         setTheme(theme) {
             this.options.theme = theme;
 
             if (theme === 'auto') {
-                const mediaQueryList = window.matchMedia('(prefers-color-scheme: dark)');
-                theme = mediaQueryList.matches ? 'dark' : 'light';
+                theme = this.resolveAutoTheme();
             }
 
             this.el.setAttribute('data-theme', theme);

@@ -277,7 +277,7 @@ div.phpdebugbar-widgets-messages {
     padding: 6px;
   }
   div.phpdebugbar-widgets-messages li.phpdebugbar-widgets-list-item span.phpdebugbar-widgets-collector {
-    color: #555;
+    color: var(--debugbar-text-muted);
     font-style: italic;
   }
   div.phpdebugbar-widgets-messages div.phpdebugbar-widgets-toolbar {
