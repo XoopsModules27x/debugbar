@@ -6,7 +6,39 @@ namespace XoopsModules\Debugbar;
 
 defined('XOOPS_ROOT_PATH') || exit('Restricted access');
 
-/** Persistence boundary for compact request profiles. */
+/**
+ * Persistence boundary for compact request profiles.
+ *
+ * The row shapes below name the columns each aggregate query actually selects.
+ * They are deliberately sealed: the Analytics page reads these rows by key, and
+ * a sealed shape is the only thing that makes a typo or a renamed column a
+ * static-analysis error instead of a silent blank cell. Values are typed
+ * `string|null` because they come straight from mysqli, which stringifies
+ * everything — callers cast at the point of use.
+ *
+ * @phpstan-type UrlAggregateRow array{
+ *     url: string|null, dirname: string|null, hits: string|null, avg_ms: string|null,
+ *     max_ms: string|null, avg_queries: string|null, max_nplus1: string|null,
+ *     violations: string|null
+ * }
+ * @phpstan-type NPlusOneRow array{
+ *     url: string|null, dirname: string|null, hits: string|null, max_nplus1: string|null,
+ *     avg_queries: string|null, sample_fp: string|null
+ * }
+ * @phpstan-type ModuleAggregateRow array{
+ *     dirname: string|null, hits: string|null, avg_ms: string|null, avg_queries: string|null,
+ *     avg_payload_kb: string|null, fragment_hits: string|null, violations: string|null
+ * }
+ * @phpstan-type ViolationRow array{
+ *     request_id: string|null, created: string|null, url: string|null, dirname: string|null,
+ *     total_ms: string|null, query_count: string|null, n_plus_one: string|null, flags: string|null
+ * }
+ * @phpstan-type VitalsRow array{
+ *     url: string|null, samples: string|null, avg_lcp: string|null, max_lcp: string|null,
+ *     avg_inp: string|null, max_inp: string|null, avg_cls: string|null, max_cls: string|null,
+ *     avg_server_ms: string|null
+ * }
+ */
 final class ProfileRepository
 {
     private ?bool $tableExists = null;
@@ -107,7 +139,7 @@ final class ProfileRepository
         }
     }
 
-    /** @return list<array<string, mixed>> */
+    /** @return list<UrlAggregateRow> */
     public function aggregates(int $days = 7, int $limit = 25): array
     {
         $db = $this->connection();
@@ -115,16 +147,19 @@ final class ProfileRepository
             return [];
         }
 
-        return $this->fetch(sprintf('SELECT MAX(url) AS url,MAX(dirname) AS dirname,COUNT(*) AS hits,AVG(total_ms) AS avg_ms,MAX(total_ms) AS max_ms,AVG(query_count) AS avg_queries,MAX(n_plus_one) AS max_nplus1,SUM(flags <> 0) AS violations FROM %s WHERE created > %u GROUP BY url_hash ORDER BY avg_ms DESC LIMIT %u', $this->table($db), time() - max(1, $days) * 86400, max(1, $limit)));
+        /** @var list<UrlAggregateRow> $rows */
+        $rows = $this->fetch(sprintf('SELECT MAX(url) AS url,MAX(dirname) AS dirname,COUNT(*) AS hits,AVG(total_ms) AS avg_ms,MAX(total_ms) AS max_ms,AVG(query_count) AS avg_queries,MAX(n_plus_one) AS max_nplus1,SUM(flags <> 0) AS violations FROM %s WHERE created > %u GROUP BY url_hash ORDER BY avg_ms DESC LIMIT %u', $this->table($db), time() - max(1, $days) * 86400, max(1, $limit)));
+
+        return $rows;
     }
 
-    /** @return list<array<string, mixed>> */
+    /** @return list<UrlAggregateRow> */
     public function worstUrls(int $days = 7, int $limit = 25): array
     {
         return $this->aggregates($days, $limit);
     }
 
-    /** @return list<array<string, mixed>> */
+    /** @return list<NPlusOneRow> */
     public function nPlusOneLeaders(int $days = 7, int $limit = 25): array
     {
         $db = $this->connection();
@@ -132,15 +167,18 @@ final class ProfileRepository
             return [];
         }
 
-        return $this->fetch(sprintf(
+        /** @var list<NPlusOneRow> $rows */
+        $rows = $this->fetch(sprintf(
             'SELECT MAX(url) AS url,MAX(dirname) AS dirname,COUNT(*) AS hits,MAX(n_plus_one) AS max_nplus1,AVG(query_count) AS avg_queries,MAX(slowest_fp) AS sample_fp FROM %s WHERE created > %u AND n_plus_one > 0 GROUP BY url_hash ORDER BY max_nplus1 DESC,avg_queries DESC LIMIT %u',
             $this->table($db),
             time() - max(1, $days) * 86400,
             max(1, $limit)
         ));
+
+        return $rows;
     }
 
-    /** @return list<array<string, mixed>> */
+    /** @return list<ModuleAggregateRow> */
     public function moduleAggregates(int $days = 7, int $limit = 100): array
     {
         $db = $this->connection();
@@ -148,15 +186,18 @@ final class ProfileRepository
             return [];
         }
 
-        return $this->fetch(sprintf(
+        /** @var list<ModuleAggregateRow> $rows */
+        $rows = $this->fetch(sprintf(
             "SELECT CASE WHEN dirname = '' THEN '—' ELSE dirname END AS dirname,COUNT(*) AS hits,AVG(total_ms) AS avg_ms,AVG(query_count) AS avg_queries,AVG(payload_bytes) / 1024 AS avg_payload_kb,SUM(is_fragment <> 0) AS fragment_hits,SUM(flags <> 0) AS violations FROM %s WHERE created > %u GROUP BY dirname ORDER BY avg_ms DESC LIMIT %u",
             $this->table($db),
             time() - max(1, $days) * 86400,
             max(1, $limit)
         ));
+
+        return $rows;
     }
 
-    /** @return list<array<string, mixed>> */
+    /** @return list<ViolationRow> */
     public function recentViolations(int $limit = 30): array
     {
         $db = $this->connection();
@@ -164,7 +205,10 @@ final class ProfileRepository
             return [];
         }
 
-        return $this->fetch(sprintf('SELECT request_id,created,url,dirname,total_ms,query_count,n_plus_one,flags FROM %s WHERE flags <> 0 ORDER BY created DESC LIMIT %u', $this->table($db), max(1, $limit)));
+        /** @var list<ViolationRow> $rows */
+        $rows = $this->fetch(sprintf('SELECT request_id,created,url,dirname,total_ms,query_count,n_plus_one,flags FROM %s WHERE flags <> 0 ORDER BY created DESC LIMIT %u', $this->table($db), max(1, $limit)));
+
+        return $rows;
     }
 
     public function count(): int
@@ -193,7 +237,7 @@ final class ProfileRepository
     /**
      * Per-URL Core Web Vitals aggregates from stored RUM samples.
      *
-     * @return list<array<string, mixed>>
+     * @return list<VitalsRow>
      */
     public function vitalsByUrl(int $sinceDays = 7, int $limit = 20): array
     {
@@ -202,7 +246,8 @@ final class ProfileRepository
             return [];
         }
 
-        return $this->fetch(sprintf(
+        /** @var list<VitalsRow> $rows */
+        $rows = $this->fetch(sprintf(
             'SELECT MAX(url) AS url, COUNT(*) AS samples,'
             . ' AVG(lcp_ms) AS avg_lcp, MAX(lcp_ms) AS max_lcp,'
             . ' AVG(inp_ms) AS avg_inp, MAX(inp_ms) AS max_inp,'
@@ -214,6 +259,8 @@ final class ProfileRepository
             time() - ($sinceDays * 86400),
             max(1, $limit)
         ));
+
+        return $rows;
     }
 
     /**
@@ -258,6 +305,7 @@ final class ProfileRepository
     }
 
     /** @return list<array<string, mixed>> */
+    /** @return list<array<string, string|null>> */
     private function fetch(string $sql): array
     {
         $db = $this->connection();

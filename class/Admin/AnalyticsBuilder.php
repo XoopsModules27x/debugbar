@@ -31,6 +31,22 @@ use XoopsModules\Debugbar\ProfileRepository;
 
 /**
  * Class AnalyticsBuilder
+ *
+ * @phpstan-import-type UrlAggregateRow from ProfileRepository
+ * @phpstan-import-type NPlusOneRow from ProfileRepository
+ * @phpstan-import-type ModuleAggregateRow from ProfileRepository
+ * @phpstan-import-type ViolationRow from ProfileRepository
+ * @phpstan-import-type VitalsRow from ProfileRepository
+ *
+ * @phpstan-type DecodedViolationRow array{
+ *     request_id: string|null, created: string|null, url: string|null, dirname: string|null,
+ *     total_ms: string|null, query_count: string|null, n_plus_one: string|null,
+ *     flags: string|null, flag_names: list<string>
+ * }
+ * @phpstan-type OpcacheHealth array{available: false}|array{
+ *     available: true, hit_rate: float, used_mb: float, free_mb: float,
+ *     wasted_mb: float, wasted_pct: float, cached_scripts: int, restarts: int
+ * }
  */
 class AnalyticsBuilder
 {
@@ -68,7 +84,25 @@ class AnalyticsBuilder
      *
      * @param int $sinceDays look-back window in days
      *
-     * @return array<string, mixed>
+     * @return array{
+     *     table_exists: bool,
+     *     since_days: int,
+     *     row_count: int,
+     *     worst_urls: list<UrlAggregateRow>,
+     *     nplus1_leaders: list<NPlusOneRow>,
+     *     modules: list<ModuleAggregateRow>,
+     *     violations: list<DecodedViolationRow>,
+     *     vitals: list<VitalsRow>,
+     *     opcache: OpcacheHealth,
+     *     flight_records: list<array{file: string, created: int, violation: bool, request_id: string, bytes: int}>,
+     *     xdebug: array{
+     *         extension_loaded: bool, modes: string[], start_with_request: string,
+     *         output_dir: string, output_dir_state: string, can_trigger: bool,
+     *         can_list: bool, can_parse: bool, shared_dir_warning: bool, zlib: bool,
+     *         trigger_value_set: bool
+     *     },
+     *     cachegrind_files: list<array{file: string, modified: int, size: int}>
+     * }
      */
     public function build(int $sinceDays = 7): array
     {
@@ -151,9 +185,9 @@ class AnalyticsBuilder
     /**
      * Attach human-readable flag names to violation rows.
      *
-     * @param array<int, array<string, mixed>> $rows raw violation rows
+     * @param list<ViolationRow> $rows raw violation rows
      *
-     * @return array<int, array<string, mixed>>
+     * @return list<DecodedViolationRow>
      */
     private function decodeViolations(array $rows): array
     {
@@ -277,7 +311,7 @@ class AnalyticsBuilder
     /**
      * Server-wide OPcache health card data.
      *
-     * @return array<string, mixed>
+     * @return OpcacheHealth
      */
     private function opcacheHealth(): array
     {

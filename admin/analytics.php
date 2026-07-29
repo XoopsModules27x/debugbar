@@ -262,7 +262,10 @@ foreach ($data['modules'] as $row) {
         $esc((int) $row['hits']),
         $esc(number_format((float) $row['avg_ms'], 1)),
         $esc(number_format((float) $row['avg_queries'], 1)),
-        $esc(number_format(((float) $row['avg_payload']) / 1024, 1)),
+        // moduleAggregates() already divides payload_bytes by 1024, so the value
+        // is KB at the source. Dividing again here would be wrong even with the
+        // right key — and the key was wrong, so the column read 0.0 for every module.
+        $esc(number_format((float) $row['avg_payload_kb'], 1)),
         $esc((int) $row['fragment_hits']),
         $esc((int) $row['violations']),
     ];

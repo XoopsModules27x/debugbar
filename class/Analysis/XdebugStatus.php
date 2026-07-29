@@ -95,7 +95,19 @@ final class XdebugStatus
     /**
      * Never-throw live wrapper.
      *
-     * @return array<string, mixed>
+     * @return array{
+     *     extension_loaded: bool,
+     *     modes: string[],
+     *     start_with_request: string,
+     *     output_dir: string,
+     *     output_dir_state: string,
+     *     can_trigger: bool,
+     *     can_list: bool,
+     *     can_parse: bool,
+     *     shared_dir_warning: bool,
+     *     zlib: bool,
+     *     trigger_value_set: bool
+     * }
      */
     public static function read(): array
     {
@@ -134,7 +146,12 @@ final class XdebugStatus
 
             return $status;
         } catch (\Throwable $e) {
-            return self::evaluate(false, [], '', '', false, false, false, '');
+            // The fallback must carry every key of the success shape: a consumer
+            // reading trigger_value_set here would otherwise hit an undefined key.
+            $status = self::evaluate(false, [], '', '', false, false, false, '');
+            $status['trigger_value_set'] = false;
+
+            return $status;
         }
     }
 }
