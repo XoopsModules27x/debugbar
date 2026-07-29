@@ -345,19 +345,6 @@ class DebugbarCorePreload extends XoopsPreloadItem
             $logger->setShowIncludedFiles((bool) $moduleConfig['debug_files_enable']);
         }
 
-        // Flush the observed dispatches into the Events collector. Done here
-        // rather than at footer.end so the two footer events themselves are
-        // still reported; anything after this point is not, which is the price
-        // of reading a list while it is still being appended to.
-        if (null !== self::$eventSpy) {
-            $logger->recordEvents(self::$eventSpy->records(), self::$eventSpy->dropped());
-            self::$eventSpy->uninstall(self::preload());
-            self::$eventSpy = null;
-        }
-
-        if (null !== self::$templateResource) {
-            $logger->recordTemplates(self::$templateResource->records(), self::$templateResource->dropped());
-        }
     }
 
     /**
@@ -370,6 +357,28 @@ class DebugbarCorePreload extends XoopsPreloadItem
     public static function eventCoreFooterEnd(array $args): void
     {
         $logger = DebugbarLogger::getInstance();
+
+        // Flush the collectors here, not at footer.start. core.footer.start
+        // fires at footer.php:21, but the theme only renders at footer.php:51,
+        // and the page's main content template is fetched inside that render
+        // (class/theme.php:601). Flushing at footer.start therefore missed the
+        // single most important template on the page, and every event dispatched
+        // during rendering, including core.footer.end itself. Everything is
+        // complete by the time this runs, and it still precedes renderDebugBar()
+        // below, which is what serialises the collectors.
+        if (null !== self::$eventSpy) {
+            $logger->recordEvents(self::$eventSpy->records(), self::$eventSpy->dropped());
+            self::$eventSpy->uninstall(self::preload());
+            self::$eventSpy = null;
+        }
+
+        if (null !== self::$templateResource) {
+            $logger->recordTemplates(self::$templateResource->records(), self::$templateResource->dropped());
+            // Cleared so a persistent SAPI cannot carry one request's templates,
+            // drop count and theme attribution into the next.
+            self::$templateResource = null;
+        }
+
         $logger->stopTime('XOOPS');
         $logger->renderDebugBar();
     }

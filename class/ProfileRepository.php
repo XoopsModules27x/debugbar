@@ -10,11 +10,19 @@ defined('XOOPS_ROOT_PATH') || exit('Restricted access');
  * Persistence boundary for compact request profiles.
  *
  * The row shapes below name the columns each aggregate query actually selects.
- * They are deliberately sealed: the Analytics page reads these rows by key, and
- * a sealed shape is the only thing that makes a typo or a renamed column a
- * static-analysis error instead of a silent blank cell. Values are typed
- * `string|null` because they come straight from mysqli, which stringifies
- * everything — callers cast at the point of use.
+ * They are deliberately sealed, so the Analytics page reading a key that is not
+ * in the shape is a static-analysis error rather than a silent blank cell.
+ *
+ * Be clear about the limit: these shapes are ASSERTED at the fetch boundary,
+ * not derived from the SQL. Analysis therefore catches a typo on the CONSUMER
+ * side, but NOT drift on the producer side — rename `AS avg_payload_kb` in the
+ * query without editing the shape beside it and analysis stays green while the
+ * page breaks. Verified by mutation. That is why each shape sits directly above
+ * its query: the two must be edited together, and nothing but proximity
+ * enforces it.
+ *
+ * Values are typed `string|null` because they come straight from mysqli, which
+ * stringifies everything — callers cast at the point of use.
  *
  * @phpstan-type UrlAggregateRow array{
  *     url: string|null, dirname: string|null, hits: string|null, avg_ms: string|null,

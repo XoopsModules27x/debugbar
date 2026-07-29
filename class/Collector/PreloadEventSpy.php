@@ -41,7 +41,23 @@ defined('XOOPS_ROOT_PATH') || exit('Restricted access');
  * rather than assuming it; claiming a strict shape here would contradict that
  * defence and make a malformed table impossible to test.
  *
- * @extends \ArrayObject<string, list<array<string, mixed>>>
+ * KNOWN LIMITATION, accepted rather than hidden: appending through a nested
+ * offset — `$preload->_events['some.event'][] = $listener` — works on a plain
+ * array but not here, because offsetGet() returns a wrapped copy rather than a
+ * reference, so PHP raises "indirect modification has no effect" and the
+ * listener is dropped. Direct assignment (`$_events['x'] = [...]`) is
+ * unaffected. XOOPS 2.7.3 core never appends after XoopsPreload's constructor
+ * has run (verified: `$_events` is written only by setEvents(), and nothing
+ * outside class/preload.php touches it), so no core path hits this. A
+ * third-party module registering a listener late, while collect_events is on,
+ * would. That is the price of observing the table at all, and it is why the
+ * spy is uninstalled the moment the preference turns out to be off.
+ *
+ * Null is part of the value type on purpose: offsetExists() has to tell a null
+ * entry from an absent one to match plain-array `isset()` semantics, so a null
+ * value is a state this class genuinely handles rather than one it excludes.
+ *
+ * @extends \ArrayObject<string, list<array<string, mixed>>|null>
  */
 final class PreloadEventSpy extends \ArrayObject
 {
@@ -144,7 +160,14 @@ final class PreloadEventSpy extends \ArrayObject
      */
     public function offsetExists(mixed $key): bool
     {
-        $exists = parent::offsetExists($key);
+        // `isset()` on a plain array is false when the value is null, but
+        // ArrayObject::offsetExists() answers true for a null offset. Core
+        // guards its dispatch with isset() and then foreaches the value, so
+        // without this the substitution would turn a silently-skipped null
+        // entry into a foreach() warning that stock XOOPS never emits.
+        // parent::offsetGet() is used deliberately — it bypasses the recording
+        // override below, so probing the value here cannot log a phantom event.
+        $exists = parent::offsetExists($key) && null !== parent::offsetGet($key);
         if (! $exists) {
             $this->record((string) $key, 0);
         }

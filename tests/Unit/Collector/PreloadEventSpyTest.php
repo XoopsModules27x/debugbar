@@ -233,14 +233,44 @@ final class PreloadEventSpyTest extends TestCase
         self::assertSame(1, $records[1]['listeners']);
     }
 
-    public function testWritesThroughToTheUnderlyingTable(): void
+    public function testDirectAssignmentWritesThroughToTheUnderlyingTable(): void
     {
-        // Core never appends after construction, but if anything ever did, the
-        // spy must behave like the array it replaced.
         $spy = new PreloadEventSpy([]);
         $spy['corenewevent'] = [['class_name' => SpyTestListener::class, 'method' => 'eventSomething']];
 
         self::assertTrue(isset($spy['corenewevent']));
         self::assertArrayHasKey('corenewevent', $spy->getArrayCopy());
+    }
+
+    public function testANullEntryIsSkippedExactlyAsAPlainArrayWouldSkipIt(): void
+    {
+        // isset() on a plain array is false for a null value, so core silently
+        // skips the dispatch. ArrayObject::offsetExists() answers true for a
+        // null offset, which would have turned that into a foreach() warning
+        // stock XOOPS never emits.
+        $spy = new PreloadEventSpy(['nullvalue' => null]);
+
+        self::assertFalse(isset($spy['nullvalue']), 'a null entry must read as absent, as it does on a plain array');
+
+        $this->trigger($spy, 'nullvalue');
+        self::assertSame('nullvalue', $spy->records()[0]['name']);
+        self::assertSame(0, $spy->records()[0]['listeners']);
+    }
+
+    public function testNestedAppendIsTheKnownLimitation(): void
+    {
+        // Documented, not fixed: offsetGet() returns a wrapped copy, so
+        // appending through a nested offset cannot reach the internal array.
+        // Core never does this; a third-party module registering a listener
+        // late would. Pinned so the limitation is visible rather than folklore.
+        $spy = new PreloadEventSpy(['coreheaderstart' => [
+            ['class_name' => SpyTestListener::class, 'method' => 'eventSomething'],
+        ]]);
+
+        @$spy['coreheaderstart'][] = ['class_name' => SpyTestListener::class, 'method' => 'eventSomething'];
+
+        $stored = $spy->getArrayCopy()['coreheaderstart'];
+        self::assertIsArray($stored);
+        self::assertCount(1, $stored, 'nested append does not reach the table');
     }
 }

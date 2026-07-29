@@ -122,7 +122,7 @@ final class TemplateResource extends \Smarty_Resource_Db
         $origin = '' === $source && 0 === $mtime
             // Core sets both to null when the template could not be read at all.
             ? ['source' => 'not found', 'path' => '']
-            : $this->origin->resolve($name, $mtime, $bytes, $this->themeSet);
+            : $this->origin->resolve($name, $mtime, $bytes, $this->themeSet, $source);
 
         $this->records[$name] = [
             'name' => $name,

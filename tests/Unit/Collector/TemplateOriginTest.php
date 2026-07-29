@@ -170,17 +170,65 @@ final class TemplateOriginTest extends TestCase
         self::assertStringContainsString('templates/blocks/', $result['path']);
     }
 
-    public function testATemplateNameContainingAPathSeparatorIsRejected(): void
+    public function testTraversalAndGlobMetacharactersAreRejected(): void
     {
-        // A name is a bare filename by XOOPS convention. Anything else must not
-        // reach glob(), where it could climb out of the tree.
+        // Names that must never reach glob(): traversal, backslashes, and the
+        // metacharacters that would make the pattern match files the template
+        // never was.
         $origin = new TemplateOrigin();
 
-        foreach (['../../secrets.tpl', 'sub/dir.tpl', 'back\\slash.tpl'] as $name) {
+        $bad = ['../../secrets.tpl', 'back\\slash.tpl', 'foo*.tpl', 'a[bc].tpl', '{a,b}.tpl', 'sys?em.tpl', "nul\0.tpl", '', 'a//b.tpl'];
+        foreach ($bad as $name) {
             $result = $origin->resolve($name, 1700000008, 10, 'default');
             self::assertSame(TemplateOrigin::DATABASE, $result['source'], "name '{$name}' must not be probed");
             self::assertSame('', $result['path']);
         }
+    }
+
+    public function testASubdirectoryNameIsResolvedNotRejected(): void
+    {
+        // Regression: names carrying a subdirectory are real. `admin/x.tpl`
+        // rows exist in a stock tplfile table, and rejecting every name with a
+        // separator reported them as `database` even when a file served them.
+        $body = '<{$admin}>';
+        $mtime = 1700000011;
+        $this->writeFixture('modules/dbtestmod/templates/admin/dbtestmod_admin.tpl', $body, $mtime);
+
+        $origin = new TemplateOrigin();
+        $result = $origin->resolve('admin/dbtestmod_admin.tpl', $mtime, strlen($body), 'default', $body);
+
+        self::assertSame(TemplateOrigin::MODULE_FILE, $result['source']);
+        self::assertStringContainsString('templates/admin/dbtestmod_admin.tpl', $result['path']);
+    }
+
+    public function testAdminThemeOverridesWithoutAnAdminSegmentAreFound(): void
+    {
+        // Under the control panel, core rewrites a normal module template to
+        // the admin theme directory and keeps the module segment, with no
+        // `admin/` component. Probing only for an `admin/` form missed every
+        // real admin override and reported it as database.
+        $body = '<{$pagenav}>';
+        $mtime = 1700000012;
+        $this->writeFixture('modules/system/themes/dbtesttheme/modules/system/dbtest_pagenav.tpl', $body, $mtime);
+
+        $origin = new TemplateOrigin();
+        $result = $origin->resolve('dbtest_pagenav.tpl', $mtime, strlen($body), 'default', $body);
+
+        self::assertSame(TemplateOrigin::THEME_OVERRIDE, $result['source']);
+        self::assertStringContainsString('modules/system/themes/dbtesttheme', $result['path']);
+    }
+
+    public function testAFileMatchingOnSizeAndTimeButNotBytesIsNotClaimed(): void
+    {
+        // The collision Codex built: identical name, size and mtime, different
+        // content. Size and mtime are a filter; only the bytes are proof.
+        $mtime = 1700000013;
+        $this->writeFixture('modules/dbtestmod/templates/dbtestmod_collide.tpl', 'FILE', $mtime);
+
+        $origin = new TemplateOrigin();
+        $result = $origin->resolve('dbtestmod_collide.tpl', $mtime, 4, 'default', 'DATA');
+
+        self::assertSame(TemplateOrigin::DATABASE, $result['source'], 'different bytes must not be claimed as the file');
     }
 
     public function testAThemeNameWithSeparatorsIsNotInterpolatedIntoTheGlob(): void
