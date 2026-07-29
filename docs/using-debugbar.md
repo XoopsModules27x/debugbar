@@ -39,6 +39,7 @@ The following settings are a practical starting point:
 | Profile retention | 7 days | Keeps enough history for comparisons without indefinite growth. |
 | Maximum stored profiles | 10000 | Adds a hard storage limit. |
 | Enable Monolog file logging | Yes | Adds structured file logs when Monolog is available. |
+| Collect browser web-vitals (RUM beacon) | Yes | Reports LCP, INP, and CLS from real administrator sessions, which is the only way to see slowness the server does not cause. |
 
 Set unused performance budgets to `0` to disable those checks. On a busy or production site, turn off XOOPS Debug when the investigation is finished.
 
@@ -132,9 +133,10 @@ Choose a 1-, 7-, or 30-day window and review:
 - the **N+1 leaderboard** for repeated query shapes;
 - **Per-module comparison** for average time, queries, payload, and violations;
 - **Recent budget violations** to see which limit was crossed;
+- **Field web vitals** for per-URL LCP, INP, and CLS measured in real administrator sessions, shown beside the server time for the same requests;
 - **Flight recorder** records containing bounded request metrics and findings;
 - OPcache health, including hit rate, memory, cached scripts, and restarts;
-- Xdebug cachegrind files when Xdebug profiling is configured.
+- Xdebug cachegrind files when Xdebug profiling is configured, with a per-file breakdown of the most expensive functions by inclusive and self cost.
 
 The stored URL is reduced to its path, so query-string secrets are not used as the Analytics identity. Profile storage is bounded by both retention days and maximum row count.
 
@@ -186,28 +188,106 @@ Xdebug is optional. When its `profile` mode and trigger-based startup are config
 1. Enable **Show “Profile this request” button** in Preferences.
 2. Open the target page as an administrator.
 3. Select **Profile this request** in the toolbar.
-4. The page reloads once with `XDEBUG_TRIGGER=1` and then removes the trigger from the visible URL.
+4. The button arms a single capture and reloads the page once. The trigger is a short-lived cookie set by the server, never a URL parameter, so the armed request cannot be replayed by anyone who later sees the address in browser history, a `Referer` header, or an access log. It is consumed on the next request whether or not a profile results.
 5. Open **Analytics > Xdebug profiles** to find the generated file.
+
+If arming does not produce a file, the toolbar says so rather than failing silently. That normally means Xdebug is loaded but not configured for trigger-based profiling; **Analytics > Xdebug profiles** states which of `mode`, `start_with_request`, and `output_dir` is unsatisfied. The button is hidden entirely when the extension cannot capture a profile at all.
 
 Cachegrind files can become large. Download or inspect what you need, delete individual files, or use **Purge files older than 30 days**. The purge action is token-protected and limited to recognized cachegrind filenames in Xdebug's configured output directory.
 
 ## 8. Practical webmaster investigations
 
+Each scenario below starts from a complaint a site owner actually receives, not from a metric. The pattern is the same throughout: use Analytics to decide *which page* to look at, then use the toolbar to understand *that one request*, then change one thing and measure again.
+
+A note on reading budget violations: every stored profile carries a set of flags, shown in **Recent budget violations** and on the flight recorder. The names are `queries`, `sql`, `boot`, `request`, `memory`, `payload`, `n+1`, `fragment-full-theme`, `duplicate-runtime`, and `query-errors`. The first seven fire only when you have set a corresponding budget; the last three always fire when the condition occurs, because none of them is ever intentional.
+
 ### “The site became slow after enabling a module”
 
-Compare the module in **Per-module comparison**, reproduce its slowest URLs, then separate total request time from SQL time. High SQL time points toward queries and indexes; low SQL time with high total time points toward PHP work, remote calls, templates, or assets.
+**Decide whether the module is actually responsible.** Open **Analytics > Per-module comparison** over a 7-day window. The comparison shows average time, average queries, average payload, and violation counts per module, so a module that is merely *present* on slow pages is distinguishable from one that is *causing* them. If the suspect module's average request time is close to the site average, the problem is more likely a page that happens to include it.
 
-### “The page works for me but fails intermittently”
+**Separate the kind of slowness.** Pick the module's worst URL, reproduce it as an administrator, and read two numbers off the request summary: total server time and SQL time.
 
-Check recent Monolog warnings and errors, then match the source location with the toolbar's request and exception context. Look for cache-directory permissions, missing files, timeouts, and failures after redirects.
+- SQL time is most of total time → the problem is queries. Continue with “The database server is busy”.
+- SQL time is a small fraction of a large total → the time is in PHP, templates, or an outbound call. Open the **Timeline**, and compare the `XOOPS Boot` duration with module display. A large boot figure on every page points at a preload rather than the page itself.
+- Both are small but the page still feels slow → the server is fine and the browser is not. Continue with “Fast for me, slow for visitors”.
 
-### “The theme is missing content”
+**Confirm before and after.** Disable the module, reload the same URL with comparable data, and compare. One request is a diagnosis; several comparable requests are evidence.
 
-Enable Smarty Debug, inspect the available variables, and use Included Files to confirm the active theme and overrides. Diagnostics can verify the configured theme directories and entry files.
+### “Fast for me, slow for visitors”
+
+This is the scenario server-side timing cannot answer, and the one most often misdiagnosed. The server may genuinely respond in 80 ms while visitors wait several seconds for something useful to appear.
+
+Enable **Collect browser web-vitals (RUM beacon)** in Preferences. The browser then reports Largest Contentful Paint, Interaction to Next Paint, and Cumulative Layout Shift back to the site, and those land beside the server timing for the same request.
+
+Open **Analytics > Field web vitals** and read each row against the server time in the same table:
+
+| Pattern | Reading |
+|---|---|
+| Server ms low, LCP high | The server is not the problem. Look at images, fonts, render-blocking scripts, and the **Frontend** collector's five slowest resources. |
+| Server ms high, LCP high | Fix the server first; the browser is waiting on the response. |
+| LCP acceptable, CLS high | Content is moving while it loads — usually images or ads without reserved dimensions. Nothing to do with PHP. |
+| LCP acceptable, INP high | The page paints quickly but responds slowly to input, which points at JavaScript on the main thread. |
+
+LCP is colored against the usual 2.5 s / 4 s thresholds. Note that these are *field* measurements from real administrator sessions on real connections, which is why they can be far worse than anything you observe locally.
+
+### “A plugin stopped working after I changed themes”
+
+Symptoms are typically a JavaScript widget that silently does nothing, or works on one page and not another.
+
+DebugBar scans the rendered HTML for the same JavaScript runtime loaded more than once — two copies of jQuery, Alpine, htmx, and similar. When it finds one, the request is flagged `duplicate-runtime` and the runtime name and both URLs are reported in the **Performance** panel.
+
+This is worth checking early because the failure is so confusing: the second copy re-initializes the library and discards the plugins the first copy registered, so nothing errors and nothing works. The usual cause is a theme that hard-codes a library the core or another module already provides. The fix is to remove the theme's copy, not to add load-order workarounds.
+
+The scan is skipped for fragment and AJAX responses and for very large pages, so reproduce on a normal full page load.
+
+### “An AJAX call is much slower than it should be”
+
+Open the page that issues the request, then look for the `fragment-full-theme` flag on the profile for the AJAX URL.
+
+That flag means the request was recognized as a fragment or AJAX call but the response still contained a complete themed HTML document. In other words the endpoint booted the theme, rendered the header, the blocks, and the footer, and then returned a fragment of it — paying for an entire page render to deliver a few hundred bytes. It is one of the most expensive and least visible mistakes in a XOOPS module.
+
+The fix is on the endpoint side: return early, before theme rendering, and emit only the fragment or JSON the caller expects.
 
 ### “The database server is busy”
 
-Use the N+1 leaderboard and worst URLs to find pages that multiply queries. Switch Query Logging to **All queries** only for a short reproduction, then restore **Slow & errors only**.
+**Find the pages, not the queries, first.** Open **Analytics > N+1 leaderboard**. It groups queries by fingerprint — the statement with its literal values normalized away — so a query executed 200 times with 200 different ids appears as one entry with a count, rather than as 200 unrelated statements.
+
+**Reproduce with full logging, briefly.** Set Query Logging to **All queries**, reload the worst URL once, and set it straight back to **Slow & errors only**. In the **Queries** collector the repeats are marked `DUP` with an execution count.
+
+**Confirm the shape.** An N+1 looks like one query that loads a list, followed by many near-identical queries that differ only in an id. The fix is a join, a bulk `IN (...)` lookup, or preloading through the handler — not caching the symptom.
+
+**Check the plan for the ones that are genuinely slow.** Use the **EXPLAIN** action beside a recorded read-only query and look for full table scans, temporary tables, and filesorts. The client never sends SQL to the server for this: it references a statement the server already recorded, so the plan you see is for the statement that actually ran.
+
+If **Recent budget violations** shows `query-errors`, stop and read those first. A failing query is never a performance question, and it is flagged regardless of any budget you configured.
+
+### “The page works for me but fails intermittently”
+
+Intermittent faults are rarely reproducible on demand, so collect rather than chase.
+
+Set a realistic budget — request time or query count — so that a bad request records itself. When a budget is crossed, the **flight recorder** writes a bounded JSON record containing the request metrics, the decoded flags, the findings, the N+1 groups, and the slow queries for that request. Open **Analytics > Flight recorder** afterwards and read the record for the failure, rather than trying to reproduce it live.
+
+Cross-reference with **Logs**. Match the Monolog entry's timestamp and source location with the flight record's request id. Common causes that show up this way are cache-directory permissions that fail only for some users, a remote call that times out under load, and errors raised after a redirect has already been issued — which is exactly the case where nothing appears on screen.
+
+### “The theme is missing content”
+
+Enable **Smarty Debug** temporarily and open the **Smarty** collector on the affected page. Confirm the actual variable name, type, and structure before editing a template — most “missing content” is a template reading a variable that was never assigned, or assuming an array where a scalar was passed. Remember the `<{ ... }>` delimiters.
+
+If the variable exists and is correct, the template you are editing is probably not the one being used. Enable **Included Files** temporarily and confirm which theme file and which override actually loaded. **Diagnostics** verifies the configured theme directories and entry files independently.
+
+Turn both preferences off afterwards. Smarty collection adds work on every request and exposes business data to any administrator; the included-files list can run to hundreds of entries.
+
+### “Where is the time going inside PHP?”
+
+Reach for this when the timeline shows the time is in PHP rather than SQL, but not *which* PHP.
+
+Configure Xdebug for trigger-based profiling, then arm one capture with **Profile this request** (see section 7). Open **Analytics > Xdebug profiles**, select the generated file, and read the top functions by cost. Two columns matter and they answer different questions:
+
+- **Inclusive** cost includes everything a function called. A high inclusive cost near the top of the stack tells you which subsystem is expensive.
+- **Self** cost excludes callees. A high self cost is the function actually burning the CPU.
+
+A function with high inclusive and low self cost is a router, not a bottleneck — follow its callees. A function with high self cost and a large call count is usually the real answer, and is often something cheap being called far too often.
+
+Cachegrind files are large. Delete them individually when finished, or use **Purge files older than 30 days**.
 
 ## 9. Finish safely
 
