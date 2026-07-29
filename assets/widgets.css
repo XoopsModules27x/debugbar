@@ -813,3 +813,68 @@ div.phpdebugbar span.phpdebugbar-widgets-badge {
     width: 12px;
     height: 12px;
 }
+
+/* -------------------------------------- */
+/* Syntax highlighting                                                        */
+/*                                                                            */
+/* The bundled highlighter is configured with classPrefix                     */
+/* "phpdebugbar-hljs-", so the stock highlight.js stylesheets, which target   */
+/* .hljs-*, never matched a single token. These rules use the theme's own     */
+/* custom properties where a colour is structural, and fixed hues that hold   */
+/* up on both the light and the dark background otherwise, so highlighting    */
+/* follows the toolbar theme without a second stylesheet.                     */
+
+.phpdebugbar code .phpdebugbar-hljs-keyword,
+.phpdebugbar code .phpdebugbar-hljs-selector-tag,
+.phpdebugbar code .phpdebugbar-hljs-literal {
+  color: #c678dd;
+  font-weight: bold;
+}
+.phpdebugbar code .phpdebugbar-hljs-string,
+.phpdebugbar code .phpdebugbar-hljs-attr {
+  color: #98c379;
+}
+.phpdebugbar code .phpdebugbar-hljs-number {
+  color: #d19a66;
+}
+.phpdebugbar code .phpdebugbar-hljs-built_in,
+.phpdebugbar code .phpdebugbar-hljs-type,
+.phpdebugbar code .phpdebugbar-hljs-title {
+  color: #61afef;
+}
+.phpdebugbar code .phpdebugbar-hljs-operator,
+.phpdebugbar code .phpdebugbar-hljs-punctuation {
+  color: var(--debugbar-text-muted);
+}
+.phpdebugbar code .phpdebugbar-hljs-comment,
+.phpdebugbar code .phpdebugbar-hljs-quote {
+  color: var(--debugbar-text-muted);
+  font-style: italic;
+}
+.phpdebugbar code .phpdebugbar-hljs-variable,
+.phpdebugbar code .phpdebugbar-hljs-template-variable {
+  color: #e06c75;
+}
+
+/* The light theme needs deeper hues to stay legible on near-white. */
+div.phpdebugbar[data-theme='light'] code .phpdebugbar-hljs-keyword,
+div.phpdebugbar[data-theme='light'] code .phpdebugbar-hljs-selector-tag,
+div.phpdebugbar[data-theme='light'] code .phpdebugbar-hljs-literal {
+  color: #8250a8;
+}
+div.phpdebugbar[data-theme='light'] code .phpdebugbar-hljs-string,
+div.phpdebugbar[data-theme='light'] code .phpdebugbar-hljs-attr {
+  color: #227a4b;
+}
+div.phpdebugbar[data-theme='light'] code .phpdebugbar-hljs-number {
+  color: #a04900;
+}
+div.phpdebugbar[data-theme='light'] code .phpdebugbar-hljs-built_in,
+div.phpdebugbar[data-theme='light'] code .phpdebugbar-hljs-type,
+div.phpdebugbar[data-theme='light'] code .phpdebugbar-hljs-title {
+  color: #1a5fb4;
+}
+div.phpdebugbar[data-theme='light'] code .phpdebugbar-hljs-variable,
+div.phpdebugbar[data-theme='light'] code .phpdebugbar-hljs-template-variable {
+  color: #b3261e;
+}

@@ -11,11 +11,11 @@ This inventory describes the standalone `modules/debugbar` release tree. The thr
 | PHP classes | 23 | Collection, profiling, storage, diagnostics, and optional Ray bridge |
 | Install and preload | 4 | Autoloading, lifecycle registration, schema/assets/key setup |
 | Language and help | 10 | English strings and XOOPS help templates |
-| Documentation shipped | 27 | Tutorials, Ray guide, credits, legacy notes, and this inventory, plus the 21 screenshots under docs/images/ referenced by the usage guide |
+| Documentation shipped | 28 | Tutorials, Ray guide, credits, legacy notes, and this inventory, plus the 22 screenshots under docs/images/ referenced by the usage guide |
 | SQL | 1 | Profile table definition |
 | Module asset overlay | 6 | XOOPS-specific styles and scripts reapplied during update |
 | Generated browser assets | 32 | Web-readable PHP DebugBar resources plus copied overlay files |
-| **Total** | **118** | Excludes the three review notes and repository tests outside the module tree |
+| **Total** | **119** | Excludes the three review notes and repository tests outside the module tree |
 
 ## Module-owned source tree
 

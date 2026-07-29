@@ -985,6 +985,13 @@ class DebugbarLogger
                 // Load the settings widget JS as an external script (cacheable by browser)
                 $output .= '<script type="text/javascript" src="'
                     . $this->escapeAttribute($xoopsAssetsUrl . '/xoops-debugbar-settings.js') . '"></script>' . "\n";
+                // Syntax highlighter. The bundle has always shipped but was never
+                // loaded, so PhpDebugBar.Widgets.highlight() fell through to plain
+                // escaping and every SQL statement rendered unhighlighted. It
+                // defines globalThis.phpdebugbar_hljs under its own class prefix,
+                // so it cannot collide with a copy the page itself loads.
+                $output .= '<script type="text/javascript" defer src="'
+                    . $this->escapeAttribute($xoopsAssetsUrl . '/vendor/highlightjs/highlight.pack.js') . '"></script>' . "\n";
                 // The client never submits SQL: only the request id + a hash
                 // of a statement the server itself recorded (see
                 // stashQueriesForExplain()/explain.php). Off unless the

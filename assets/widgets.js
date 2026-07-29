@@ -634,10 +634,22 @@
                     li.append(val);
                 } else {
                     const m = value.message;
+                    // A query row's message is the statement itself, so it is worth
+                    // syntax highlighting in place rather than only once expanded.
+                    // The bundled highlighter escapes as it tokenises; when it is
+                    // absent highlight() falls back to escaping, so neither branch
+                    // puts raw SQL into innerHTML.
+                    const isQuery = !!(value.context_json && value.context_json.is_query);
 
                     val = document.createElement('span');
                     val.classList.add(csscls('value'));
-                    val.textContent = m;
+                    if (isQuery && typeof phpdebugbar_hljs !== 'undefined') {
+                        const inlineCode = document.createElement('code');
+                        inlineCode.innerHTML = PhpDebugBar.Widgets.highlight(m, 'sql');
+                        val.append(inlineCode);
+                    } else {
+                        val.textContent = m;
+                    }
                     val.classList.add(csscls('truncated'));
                     li.append(val);
 
@@ -656,7 +668,7 @@
                                 val.classList.remove(csscls('pretty'));
                                 val.classList.add(csscls('truncated'));
                             } else {
-                                prettyVal = prettyVal || createCodeBlock(value.message);
+                                prettyVal = prettyVal || createCodeBlock(value.message, isQuery ? 'sql' : undefined);
                                 val.classList.add(csscls('pretty'));
                                 val.classList.remove(csscls('truncated'));
                                 val.innerHTML = '';

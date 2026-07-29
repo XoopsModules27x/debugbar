@@ -79,6 +79,8 @@ That expansion is what makes a message actionable rather than merely informative
 
 **Shows:** SQL sent through the XOOPS logger, with duration, a `DUP×n` marker on repeated statements, and an **EXPLAIN** action on read-only statements.
 
+![The Queries collector with SQL syntax highlighting: keywords, string literals, numbers and operators are coloured distinctly, with EXPLAIN and Copy details on each row.](images/t03c-sql-highlighting.png)
+
 **What to do with it:** find repetition first, slowness second. Note what this panel is *not* telling you: only two rows appear because Query Logging is set to **Slow & errors only**, while Health below reports 108 queries for the same request. Fast queries are still counted and still analysed — they are simply not drawn. Switch to **All queries** for one reload when you need to see them all.
 
 #### Running EXPLAIN on a recorded query
