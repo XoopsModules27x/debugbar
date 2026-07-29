@@ -1061,6 +1061,17 @@ class DebugbarLogger
                 case 'queries':
                     $channel = 'Queries';
                     $context['is_query'] = true;
+                    // Ship the stash key with the row. The toolbar used to derive it
+                    // with crypto.subtle.digest(), which exists only in a secure
+                    // context — on a plain-HTTP development host that is undefined,
+                    // the promise chain never ran, and the EXPLAIN button hung on
+                    // "Running…" forever. The server already computes this hash when
+                    // stashing, so sending it removes the browser crypto dependency
+                    // entirely and guarantees the two sides agree on the key.
+                    // Hash exactly what stashQueriesForExplain() keys on: the trimmed
+                    // statement capped at QUERY_SQL_CAP. Anything else and the lookup
+                    // misses.
+                    $context['sql_hash'] = hash('sha256', substr(trim($message), 0, self::QUERY_SQL_CAP));
                     $queryTime = is_numeric($context['query_time'] ?? null) ? (float) $context['query_time'] : 0.0;
                     $qt = $queryTime > 0 ? sprintf('%0.6f', $queryTime) : '';
                     $elapsed = microtime(true) - $this->requestStart;

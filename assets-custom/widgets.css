@@ -238,23 +238,25 @@ div.phpdebugbar-widgets-messages {
     mask-position: center;
     background-color: currentColor;
   }
-  div.phpdebugbar-widgets-messages li.phpdebugbar-widgets-list-item button.phpdebugbar-widgets-copy-details {
+  /* One right-anchored group holds every row action, so the buttons cannot
+     overlap when a label grows ("Confirm EXPLAIN?") or the font size changes.
+     row-reverse keeps EXPLAIN to the left of Copy details, as before. */
+  div.phpdebugbar-widgets-messages li.phpdebugbar-widgets-list-item span.phpdebugbar-widgets-row-actions {
     position: absolute;
     right: 5px;
     top: 3px;
-    margin: 0;
-    padding: 2px 6px;
-    height: auto;
-    font-size: 11px;
+    display: flex;
+    flex-direction: row-reverse;
+    align-items: center;
+    gap: 4px;
   }
-  div.phpdebugbar-widgets-messages li.phpdebugbar-widgets-list-item button.phpdebugbar-widgets-explain-query {
-    position: absolute;
-    right: 78px;
-    top: 3px;
+  div.phpdebugbar-widgets-messages li.phpdebugbar-widgets-list-item span.phpdebugbar-widgets-row-actions button {
+    position: static;
     margin: 0;
     padding: 2px 6px;
     height: auto;
     font-size: 11px;
+    white-space: nowrap;
   }
   div.phpdebugbar-widgets-messages li.phpdebugbar-widgets-list-item.phpdebugbar-widgets-has-details {
     position: relative;

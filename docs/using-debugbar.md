@@ -81,6 +81,24 @@ That expansion is what makes a message actionable rather than merely informative
 
 **What to do with it:** find repetition first, slowness second. Note what this panel is *not* telling you: only two rows appear because Query Logging is set to **Slow & errors only**, while Health below reports 108 queries for the same request. Fast queries are still counted and still analysed — they are simply not drawn. Switch to **All queries** for one reload when you need to see them all.
 
+#### Running EXPLAIN on a recorded query
+
+Every read-only `SELECT` row carries an **EXPLAIN** button, which asks the database how it would actually execute that statement.
+
+It takes two clicks. The first arms the button, which changes to **Confirm EXPLAIN?** and disarms itself after four seconds; the second runs it. That deliberate friction exists because EXPLAIN is a real query against a live database, and a mis-click on a query-heavy page should not fire dozens of them.
+
+The plan appears beneath the row's context:
+
+![The expanded context of a JOIN query showing sql, error, errno, query_time, is_query, sql_hash and request_percent, followed by the EXPLAIN plan as an indented tree of operations with cost and row estimates.](images/t03b-explain-result.png)
+
+**How to read it.** MySQL 8 and later answer with a tree, read from the inside out — the innermost line runs first and feeds its parent. In the example the innermost step is an `Index range scan on b using PRIMARY`, the results are joined by two nested loops, then a `Temporary table` is materialised and finally sorted by `Sort row IDs`. Each line carries an estimated cost and row count.
+
+**What to look for:** a `Table scan` on a large table means no usable index. `Temporary table` and a `Sort` on a large result mean the database is materialising and sorting rows in memory or on disk, which is usually what a missing index on the `ORDER BY` column produces. Row estimates far larger than what the page needs mean the query is reading much more than it uses. Any of these is a candidate for an index, a narrower `WHERE`, or a `LIMIT`.
+
+**What it is safe from.** The browser never sends SQL to the server. It sends the request id and the `sql_hash` shown in the context — a hash the server itself computed for a statement it recorded during that request — and the endpoint refuses anything that is not a `SELECT` in its own short-lived stash. There is no path from this button to running arbitrary SQL, which is why it can be offered at all. The stashed copy is also redacted: every string literal becomes `''` and every number `0`, so no session id, password or token is ever written to disk.
+
+**When it is not there:** the button appears only when the **On-demand EXPLAIN** preference is enabled and the row is a recorded read-only statement.
+
 ### Blocks
 
 ![The Blocks collector listing seventeen blocks - User Menu, Search, Main Menu, Who is Online, and others - each reported as Not cached.](images/t04-blocks.png)
@@ -136,6 +154,16 @@ That expansion is what makes a message actionable rather than merely informative
 **Shows:** browser-side timings reported back by the page — DOM interactive, DOMContentLoaded, load event, bytes transferred, resource count, and the five slowest resources by name.
 
 **What to do with it:** separate a slow server from a slow page. When the server answered quickly but this panel shows a large DOM-interactive figure, the problem is in the browser and no PHP change will fix it. The named slow resources point straight at the offending files.
+
+### The "Profile this request" button
+
+This one is not a collector — it sits at the right-hand end of the toolbar, beside the memory and timing figures.
+
+**What it does:** it arms a single Xdebug profile capture and reloads the page once. Clicking it posts to `xdebug-arm.php`, which sets a 60-second one-shot trigger cookie server-side — but only after checking that the request is a POST, that the caller passes the same access policy the admin pages use (module admin, XOOPS debug on, module enabled), that a single-use `DEBUGBAR_XDEBUG` token is valid, and that Xdebug is actually configured to accept a trigger. The trigger never travels in the URL, so it cannot be replayed by anyone who later reads it out of browser history, a `Referer` header, or an access log. On the next request the profiler consumes and deletes the cookie whatever the outcome, so an arming can never outlive the one page load it was meant for.
+
+**What you do with the information:** the captured file appears in **Analytics > Xdebug profiles**. Open it and read the top-functions table as described in section 8 — inclusive cost tells you which subsystem is expensive, self cost tells you which function is actually burning CPU. Reach for it when the Timeline says the time is in PHP but not *which* PHP; it is the only view here that goes below the level of "this lifecycle phase was slow".
+
+**If nothing is captured** the toolbar says so rather than failing silently, and **Analytics > Xdebug profiles** states which of `mode`, `start_with_request`, or `output_dir` is unsatisfied. The button is hidden entirely when Xdebug cannot capture a profile at all, and the whole feature is behind the **Show "Profile this request" button** preference.
 
 ### Exceptions and Deprecated
 
