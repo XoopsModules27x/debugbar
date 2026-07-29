@@ -8,7 +8,7 @@ This inventory describes the standalone `modules/debugbar` release tree. The thr
 |---|---:|---|
 | Module root | 7 | Manifest, entry points, README, and changelog |
 | Administration | 8 | Home, Analytics, Logs, Diagnostics, navigation, and wrappers |
-| PHP classes | 23 | Collection, profiling, storage, diagnostics, and optional Ray bridge |
+| PHP classes | 27 | Collection, profiling, storage, diagnostics, event/template collectors, and optional Ray bridge |
 | Install and preload | 4 | Autoloading, lifecycle registration, schema/assets/key setup |
 | Language and help | 10 | English strings and XOOPS help templates |
 | Documentation shipped | 28 | Tutorials, Ray guide, credits, legacy notes, and this inventory, plus the 22 screenshots under docs/images/ referenced by the usage guide |
@@ -62,6 +62,11 @@ debugbar/
 |   |   |-- SqlRedactor.php
 |   |   |-- SystemDiagnostics.php
 |   |   `-- XdebugStatus.php
+|   |-- Collector/
+|   |   |-- EventListenerProxy.php
+|   |   |-- PreloadEventSpy.php
+|   |   |-- TemplateOrigin.php
+|   |   `-- TemplateResource.php
 |   |-- DebugbarCoreConfig.php
 |   |-- DebugbarLogger.php
 |   |-- FlightRecorder.php
