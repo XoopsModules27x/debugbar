@@ -36,9 +36,9 @@ final class QueryAnalyzer
      *     slowest_ms: float,
      *     slowest_fp: string,
      *     worst_repeat: int,
-     *     duplicates: list<array{sql: string, count: int}>,
-     *     n_plus_one: list<array{sql: string, count: int}>,
-     *     similar_shapes: list<array{sql: string, count: int, variants: int}>,
+     *     duplicates: list<array{sql: string, count: int, origins: list<string>}>,
+     *     n_plus_one: list<array{sql: string, count: int, origins: list<string>}>,
+     *     similar_shapes: list<array{sql: string, count: int, variants: int, origins: list<string>}>,
      *     slow: list<array{sql: string, ms: float}>
      * }
      */
@@ -50,6 +50,10 @@ final class QueryAnalyzer
         $shapeCounts = [];
         $shapeSamples = [];
         $shapeVariants = [];
+        /** @var array<string, array<string, int>> $exactOrigins call site => hits, per exact statement */
+        $exactOrigins = [];
+        /** @var array<string, array<string, int>> $shapeOrigins call site => hits, per statement shape */
+        $shapeOrigins = [];
         $slow = [];
         $total = 0.0;
         $errors = 0;
@@ -69,14 +73,22 @@ final class QueryAnalyzer
             $count++;
             $total += $ms;
 
+            $origin = trim((string) ($query['origin'] ?? ''));
+
             $exactKey = self::exactKey($sql);
             $exactCounts[$exactKey] = ($exactCounts[$exactKey] ?? 0) + 1;
             $exactSamples[$exactKey] = $sql;
+            if ('' !== $origin) {
+                $exactOrigins[$exactKey][$origin] = ($exactOrigins[$exactKey][$origin] ?? 0) + 1;
+            }
 
             $shapeKey = QueryFingerprinter::fingerprint($sql);
             $shapeCounts[$shapeKey] = ($shapeCounts[$shapeKey] ?? 0) + 1;
             $shapeSamples[$shapeKey] = $sql;
             $shapeVariants[$shapeKey][$exactKey] = true;
+            if ('' !== $origin) {
+                $shapeOrigins[$shapeKey][$origin] = ($shapeOrigins[$shapeKey][$origin] ?? 0) + 1;
+            }
 
             if (self::hasError($query['error'] ?? null)) {
                 $errors++;
@@ -92,7 +104,11 @@ final class QueryAnalyzer
 
         $duplicates = [];
         foreach ($exactCounts as $key => $n) {
-            $duplicates[] = ['sql' => $exactSamples[$key], 'count' => $n];
+            $duplicates[] = [
+                'sql' => $exactSamples[$key],
+                'count' => $n,
+                'origins' => self::topOrigins($exactOrigins[$key] ?? []),
+            ];
         }
         usort($duplicates, static fn (array $a, array $b): int => $b['count'] <=> $a['count']);
 
@@ -118,6 +134,7 @@ final class QueryAnalyzer
                     'sql' => $shapeSamples[$shapeKey],
                     'count' => $n,
                     'variants' => $variants,
+                    'origins' => self::topOrigins($shapeOrigins[$shapeKey] ?? []),
                 ];
             }
             usort($similarShapes, static fn (array $a, array $b): int => $b['count'] <=> $a['count']);
@@ -152,6 +169,27 @@ final class QueryAnalyzer
     private static function hasError(mixed $error): bool
     {
         return ! in_array($error, [null, false, 0, 0.0, '', '0', []], true);
+    }
+
+    /**
+     * The most frequent call sites for one statement, formatted for display.
+     *
+     * Capped at two: a third rarely changes the decision, and these strings sit
+     * inline in panel messages where length costs readability.
+     *
+     * @param array<string, int> $origins call site => hit count
+     *
+     * @return list<string>
+     */
+    private static function topOrigins(array $origins): array
+    {
+        arsort($origins);
+        $formatted = [];
+        foreach (array_slice($origins, 0, 2, true) as $origin => $hits) {
+            $formatted[] = $hits > 1 ? sprintf('%s (x%d)', $origin, $hits) : $origin;
+        }
+
+        return $formatted;
     }
 
     /**

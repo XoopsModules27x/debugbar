@@ -21,6 +21,9 @@ final class Profiler
     private static ?self $instance = null;
     private bool $finalized = false;
     private string $requestId;
+
+    /** @var array<string, mixed> Request metrics, populated by finalize() and read by getSegments(). */
+    private array $metrics = [];
     private ?DiagnosticSanitizer $diagnosticSanitizer = null;
 
     /** Basename of this request's Xdebug cachegrind dump, if one was written. */
@@ -212,6 +215,9 @@ final class Profiler
             }
 
             $metrics = ['queries' => $stats['count'], 'query_ms' => $stats['total_ms'], 'boot_ms' => $bootMs, 'total_ms' => $totalMs, 'memory_mb' => $memoryMb, 'payload_kb' => $this->payloadKb(), 'worst_repeat' => $stats['worst_repeat'], 'query_errors' => $stats['error_count'], 'fragment_full_theme' => $fragmentFullTheme, 'duplicate_runtimes' => $duplicateRuntimes];
+            // Retained so getSegments() can be asked for the breakdown after the
+            // fact, by this class and by anything reading the profiler.
+            $this->metrics = $metrics;
             $verdict = BudgetChecker::check($metrics, $budgets);
             $decodedFlags = BudgetChecker::decodeFlags($verdict['flags']);
             $violations = BudgetChecker::describeViolations($verdict['findings']);
@@ -243,10 +249,11 @@ final class Profiler
                     'Flags' => $decodedFlags === [] ? 'none' : implode(', ', $decodedFlags),
                     'Findings' => $violations === [] ? ['none'] : $violations,
                     // Exact SQL repeats (true re-executions of the same statement).
-                    'N+1 candidates' => $stats['n_plus_one'] === [] ? ['none'] : $stats['n_plus_one'],
+                    'N+1 candidates' => $stats['n_plus_one'] === [] ? ['none'] : self::withOrigins($stats['n_plus_one']),
                     // Parameterised shapes with multiple distinct variants (id-loop style).
-                    'Similar shapes' => ($stats['similar_shapes'] ?? []) === [] ? ['none'] : $stats['similar_shapes'],
+                    'Similar shapes' => ($stats['similar_shapes'] ?? []) === [] ? ['none'] : self::withOrigins($stats['similar_shapes']),
                     'Duplicate runtimes' => $duplicateRuntimes === [] ? 'none' : array_keys($duplicateRuntimes),
+                    'Time split' => $this->getSegments()['segments'],
                 ], 'Performance'));
             }
             foreach ($violations as $violation) {
@@ -262,7 +269,19 @@ final class Profiler
             (new ProfileRepository())->insert(['request_id' => $this->requestId, 'created' => time(), 'url' => $url, 'url_hash' => hash('xxh128', $url), 'dirname' => $module, 'is_fragment' => $this->isFragment(), 'is_admin_side' => str_contains($url, '/admin'), 'total_ms' => $totalMs, 'boot_ms' => $bootMs, 'query_count' => $stats['count'], 'query_ms' => $stats['total_ms'], 'slowest_ms' => $stats['slowest_ms'], 'slowest_fp' => $stats['slowest_fp'], 'n_plus_one' => $stats['worst_repeat'], 'peak_mem_kb' => (int) round(memory_get_peak_usage(true) / 1024), 'payload_bytes' => (int) round($metrics['payload_kb'] * 1024), 'blocks_cached' => $blocks['cached'], 'blocks_uncached' => $blocks['uncached'], 'flags' => $verdict['flags']], (int) ($budgets['profiles_retention_days'] ?? 7), (int) ($budgets['profiles_max_rows'] ?? 10000));
             (new FlightRecorder())->record($this->requestId, ['request_id' => $this->requestId, 'url' => $url, 'module' => $module, 'metrics' => $metrics, 'flags' => $decodedFlags, 'findings' => $verdict['findings'], 'violations' => $violations, 'n_plus_one' => $stats['n_plus_one'], 'slow' => $stats['slow']], $verdict['flags'] !== 0, 30);
             if (is_object($debugbar) && ! headers_sent()) {
-                header('Server-Timing: xoops;dur=' . round($totalMs, 1) . ', sql;dur=' . round((float) $stats['total_ms'], 1), false);
+                // Boot / db / app rather than one total: the browser's own
+                // performance panel then shows the same split the Timeline does,
+                // which is what makes a waterfall in devtools comparable with
+                // what the toolbar reports.
+                $segments = $this->getSegments()['segments'];
+                header(sprintf(
+                    'Server-Timing: boot;dur=%.1f, db;dur=%.1f;desc="%d queries", app;dur=%.1f, total;dur=%.1f',
+                    $segments['Boot'] ?? 0.0,
+                    (float) $stats['total_ms'],
+                    (int) $stats['count'],
+                    $segments['App'] ?? 0.0,
+                    round($totalMs, 1)
+                ), false);
             }
         } catch (\Throwable $e) {
             trigger_error('debugbar profiler failed: ' . $e->getMessage(), E_USER_WARNING);
@@ -322,6 +341,54 @@ final class Profiler
                 // EXPLAIN is best-effort
             }
         }
+
+        return $findings;
+    }
+
+    /**
+     * Boot / SQL / App split for the request, and which segment dominated it.
+     *
+     * This is the question "where did the time go" at the only granularity that
+     * decides what to do next: a request dominated by App time will not be
+     * improved by query tuning, and one dominated by Boot is a preload or
+     * bootstrap problem rather than anything in the module. Returns zeros until
+     * finalize() has run.
+     *
+     * @return array{label: string, ms: float, segments: array<string, float>}
+     */
+    public function getSegments(): array
+    {
+        $boot = (float) ($this->metrics['boot_ms'] ?? 0);
+        $db = (float) ($this->metrics['query_ms'] ?? 0);
+        $total = (float) ($this->metrics['total_ms'] ?? 0);
+        // Clamped at zero: boot and SQL are measured independently and can
+        // overlap slightly, which would otherwise show a negative App segment.
+        $app = max(0.0, $total - $boot - $db);
+        $segments = ['Boot' => round($boot, 1), 'SQL' => round($db, 1), 'App' => round($app, 1)];
+        arsort($segments);
+        $label = (string) array_key_first($segments);
+
+        return ['label' => $label, 'ms' => $segments[$label], 'segments' => $segments];
+    }
+
+    /**
+     * Append the call sites to each finding, so a repeat count comes with the
+     * file and line that produced it rather than just the statement.
+     *
+     * @param list<array<string, mixed>> $findings analyzer rows carrying 'origins'
+     *
+     * @return list<array<string, mixed>>
+     */
+    private static function withOrigins(array $findings): array
+    {
+        foreach ($findings as &$finding) {
+            $origins = $finding['origins'] ?? [];
+            if (is_array($origins) && [] !== $origins) {
+                $finding['from'] = implode(', ', array_map('strval', $origins));
+            }
+            unset($finding['origins']);
+        }
+        unset($finding);
 
         return $findings;
     }

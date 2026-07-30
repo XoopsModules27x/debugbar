@@ -696,6 +696,41 @@ class DebugbarLogger
     }
 
     /**
+     * Compact "who issued this query" origin: the first one or two stack frames
+     * outside the database, logger and this module, as root-relative file:line.
+     *
+     * This is what turns an N+1 finding from "a problem exists somewhere" into
+     * a file and a line number. Without it the Queries panel tells an
+     * administrator that forty identical statements ran, but not which module
+     * to disable or which handler to fix.
+     *
+     * @return string e.g. "/kernel/member.php:194 < /modules/foo/blocks/bar.php:52"
+     */
+    private function queryOrigin(): string
+    {
+        $rootPath = str_replace('\\', '/', XOOPS_ROOT_PATH);
+        $frames = [];
+        foreach (debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 18) as $frame) {
+            $file = isset($frame['file']) ? str_replace('\\', '/', $frame['file']) : '';
+            if ('' === $file) {
+                continue;
+            }
+            // The database drivers, the logger dispatch, this module and the
+            // generic persistence layer are never the interesting caller.
+            if (1 === preg_match('#/(class/database/|class/logger/|modules/debugbar/|kernel/object\.php)#', $file)) {
+                continue;
+            }
+            $short = str_starts_with($file, $rootPath) ? substr($file, strlen($rootPath)) : $file;
+            $frames[] = $short . ':' . ($frame['line'] ?? 0);
+            if (count($frames) >= 2) {
+                break;
+            }
+        }
+
+        return implode(' < ', $frames);
+    }
+
+    /**
      * Block renders this request, split by whether they came from cache.
      *
      * @return array{cached: int, uncached: int}
@@ -1174,6 +1209,11 @@ class DebugbarLogger
                             'sql' => substr($sqlKey, 0, self::QUERY_SQL_CAP),
                             'ms' => $queryTime * 1000.0,
                             'error' => $level === LogLevel::ERROR,
+                            // Captured inside the cap guard on purpose: a backtrace
+                            // per query is affordable in debug mode but not
+                            // unbounded, and a page past the cap is not one where
+                            // another origin string changes the diagnosis.
+                            'origin' => $this->queryOrigin(),
                         ];
                     }
                     if (! isset($this->queryMap[$sqlKey])) {
