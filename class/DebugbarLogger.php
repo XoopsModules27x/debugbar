@@ -1180,18 +1180,29 @@ class DebugbarLogger
             switch ($chan) {
                 case 'blocks':
                     $channel = 'Blocks';
-                    // Core dispatches the raw block name and leaves formatting
-                    // to the sub-logger (class/logger/xoopslogger.php), which is
-                    // why the status is appended here rather than taken from the
-                    // message — and why it can be translated at all.
-                    $msg = $message . ': ';
-                    if ((bool) ($context['cached'] ?? false)) {
-                        $msg .= sprintf(_MD_DEBUGBAR_CACHED, (int) ($context['cachetime'] ?? 0));
-                        $this->blockCounts['cached']++;
+                    // Two core contracts exist and the module has to serve both.
+                    // XOOPS 2.7.3 dispatches the RAW block name and leaves
+                    // formatting to the sub-logger. The XMF 2.0 line pre-formats
+                    // the message itself, in hardcoded English. Appending the
+                    // status unconditionally would double it on the second, and
+                    // taking the message as-is would lose translation on the
+                    // first — so decide from the data rather than sniffing a
+                    // version: when the message is still just the block name,
+                    // this core left the formatting to us.
+                    $blockName = (string) ($context['name'] ?? '');
+                    $preformatted = '' !== $blockName && $message !== $blockName;
+                    $cached = (bool) ($context['cached'] ?? false);
+                    if ($preformatted) {
+                        $msg = $message;
                     } else {
-                        $msg .= _MD_DEBUGBAR_NOT_CACHED;
-                        $this->blockCounts['uncached']++;
+                        $msg = $message . ': ';
+                        $msg .= $cached
+                            ? sprintf(_MD_DEBUGBAR_CACHED, (int) ($context['cachetime'] ?? 0))
+                            : _MD_DEBUGBAR_NOT_CACHED;
                     }
+                    // Counted from the context flag either way, so the stored
+                    // cached/uncached split does not depend on the message shape.
+                    $this->blockCounts[$cached ? 'cached' : 'uncached']++;
 
                     break;
                 case 'deprecated':
