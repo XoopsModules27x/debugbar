@@ -96,10 +96,17 @@ if ($requested !== '') {
                 echo '<tr><td><time class="debugbar-log-time" datetime="' . $esc($entry['timestamp']) . '" title="' . $esc($timestamp) . '">'
                     . '<strong>' . $esc($timestamp) . '</strong></time></td>'
                     . '<td><span class="debugbar-log-level debugbar-log-level--' . $esc($level) . '">' . $esc($level) . '</span></td>'
-                    . '<td class="debugbar-log-description">' . $esc($entry['message'])
+                    // Truncation lives on an inner span, not the cell: browsers
+                    // largely ignore max-width on a td under auto table layout,
+                    // which is why these two columns used to run over the ones
+                    // beside them. title= keeps the untruncated value one hover
+                    // away — a clipped file path with no way to read it in full
+                    // would be worse than a wide column.
+                    . '<td class="debugbar-log-description"><span class="debugbar-log-clip" title="' . $esc($entry['message']) . '">' . $esc($entry['message']) . '</span>'
                     . ($error !== '' ? ' <span class="debugbar-log-error">' . $esc($error) . '</span>' : '') . '</td>'
                     . '<td><span class="debugbar-log-channel">' . $esc($entry['channel']) . '</span></td>'
-                    . '<td class="debugbar-log-location">' . $esc($location !== '' ? $location : '—') . '</td><td>';
+                    . '<td class="debugbar-log-location"><span class="debugbar-log-clip" title="' . $esc($location) . '">'
+                    . $esc($location !== '' ? $location : '—') . '</span></td><td>';
                 if ($entry['context'] !== [] || $entry['extra'] !== []) {
                     $detail = ['context' => $entry['context']];
                     if ($entry['extra'] !== []) {
