@@ -72,10 +72,10 @@ define('_MI_DEBUGBAR_LEVEL_CRITICAL', 'Critical');
 define('_MI_DEBUGBAR_BUDGET_DSC', 'Requests exceeding this are flagged in the Perf tab and Analytics; 0 disables the check');
 
 define('_MI_DEBUGBAR_ADMENU1', 'Home');
-define('_MI_DEBUGBAR_MENU_ABOUT', 'About');
 define('_MI_DEBUGBAR_MENU_ANALYTICS', 'Analytics');
 define('_MI_DEBUGBAR_MENU_LOGS', 'Logs');
 define('_MI_DEBUGBAR_MENU_DIAGNOSTICS', 'Diagnostics');
+define('_MI_DEBUGBAR_MENU_ABOUT', 'About');
 define('_MI_DEBUGBAR_ANALYTICS', _MI_DEBUGBAR_MENU_ANALYTICS);
 
 //Help

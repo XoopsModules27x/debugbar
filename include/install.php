@@ -37,10 +37,11 @@ function xoops_module_update_debugbar($module, $previousVersion)
     $assetsReady = _debugbar_copy_assets();
     $tableReady = _debugbar_create_profiles_table();
     $vitalsReady = _debugbar_add_vitals_columns();
+    $blocksReady = _debugbar_add_block_columns();
     $indexReady = _debugbar_add_request_index();
     $renameReady = _debugbar_rename_button_config();
 
-    return $assetsReady && $tableReady && $vitalsReady && $indexReady && $renameReady;
+    return $assetsReady && $tableReady && $vitalsReady && $blocksReady && $indexReady && $renameReady;
 }
 
 /**
@@ -51,13 +52,45 @@ function xoops_module_update_debugbar($module, $previousVersion)
  */
 function _debugbar_add_vitals_columns(): bool
 {
-    $db = $GLOBALS['xoopsDB'];
-    $table = $db->prefix('debugbar_profiles');
-    $columns = [
+    return _debugbar_add_missing_columns([
         'lcp_ms' => 'DECIMAL(10,1) NULL DEFAULT NULL',
         'inp_ms' => 'DECIMAL(10,1) NULL DEFAULT NULL',
         'cls' => 'DECIMAL(6,4) NULL DEFAULT NULL',
-    ];
+    ], 'vitals');
+}
+
+/**
+ * Idempotently add the block cache-hit counters to an existing table.
+ *
+ * Block caching is the single largest win available on most XOOPS sites — a
+ * page rendering nineteen uncached blocks pays nineteen block renders, each
+ * with its own queries, on every view. Storing the split per request is what
+ * lets Analytics rank pages by it instead of leaving the administrator to read
+ * the Blocks panel one request at a time.
+ */
+function _debugbar_add_block_columns(): bool
+{
+    return _debugbar_add_missing_columns([
+        'blocks_cached' => 'SMALLINT UNSIGNED NOT NULL DEFAULT 0',
+        'blocks_uncached' => 'SMALLINT UNSIGNED NOT NULL DEFAULT 0',
+    ], 'block counter');
+}
+
+/**
+ * Add columns to debugbar_profiles that information_schema shows absent.
+ *
+ * `CREATE TABLE IF NOT EXISTS` never alters an existing table, so every schema
+ * addition needs an ALTER for installations upgrading from an earlier version.
+ * Existence is checked per column, which is what makes running this repeatedly
+ * safe.
+ *
+ * @param array<string, string> $columns column name => column definition
+ * @param string                $label   used only in the failure warning
+ */
+function _debugbar_add_missing_columns(array $columns, string $label): bool
+{
+    $db = $GLOBALS['xoopsDB'];
+    $table = $db->prefix('debugbar_profiles');
 
     try {
         foreach ($columns as $name => $definition) {
@@ -77,7 +110,7 @@ function _debugbar_add_vitals_columns(): bool
 
         return true;
     } catch (\Throwable $e) {
-        trigger_error('DebugBar vitals column migration failed: ' . $e->getMessage(), E_USER_WARNING);
+        trigger_error('DebugBar ' . $label . ' column migration failed: ' . $e->getMessage(), E_USER_WARNING);
 
         return false;
     }
@@ -175,6 +208,7 @@ function _debugbar_create_profiles_table(): bool
         query_ms DECIMAL(10,1) NOT NULL DEFAULT 0, slowest_ms DECIMAL(10,1) NOT NULL DEFAULT 0,
         slowest_fp VARCHAR(255) NOT NULL DEFAULT \'\', n_plus_one SMALLINT UNSIGNED NOT NULL DEFAULT 0,
         peak_mem_kb INT UNSIGNED NOT NULL DEFAULT 0, payload_bytes INT UNSIGNED NOT NULL DEFAULT 0,
+        blocks_cached SMALLINT UNSIGNED NOT NULL DEFAULT 0, blocks_uncached SMALLINT UNSIGNED NOT NULL DEFAULT 0,
         flags SMALLINT UNSIGNED NOT NULL DEFAULT 0,
         lcp_ms DECIMAL(10,1) NULL DEFAULT NULL, inp_ms DECIMAL(10,1) NULL DEFAULT NULL, cls DECIMAL(6,4) NULL DEFAULT NULL,
         PRIMARY KEY (profile_id), KEY idx_created (created),

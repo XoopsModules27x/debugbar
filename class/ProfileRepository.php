@@ -35,7 +35,8 @@ defined('XOOPS_ROOT_PATH') || exit('Restricted access');
  * }
  * @phpstan-type ModuleAggregateRow array{
  *     dirname: string|null, hits: string|null, avg_ms: string|null, avg_queries: string|null,
- *     avg_payload_kb: string|null, fragment_hits: string|null, violations: string|null
+ *     avg_payload_kb: string|null, fragment_hits: string|null, violations: string|null,
+ *     avg_blocks_cached: string|null, avg_blocks_uncached: string|null
  * }
  * @phpstan-type ViolationRow array{
  *     request_id: string|null, created: string|null, url: string|null, dirname: string|null,
@@ -114,7 +115,7 @@ final class ProfileRepository
         // catch below swallows, so the profile would silently never be stored.
         $q = static fn (string $v, int $max): string => $db->quote(substr($v, 0, $max));
         $sql = sprintf(
-            'INSERT INTO %s (request_id,created,url,url_hash,dirname,is_fragment,is_admin_side,total_ms,boot_ms,query_count,query_ms,slowest_ms,slowest_fp,n_plus_one,peak_mem_kb,payload_bytes,flags) VALUES (%s,%u,%s,%s,%s,%u,%u,%.1F,%.1F,%u,%.1F,%.1F,%s,%u,%u,%u,%u)',
+            'INSERT INTO %s (request_id,created,url,url_hash,dirname,is_fragment,is_admin_side,total_ms,boot_ms,query_count,query_ms,slowest_ms,slowest_fp,n_plus_one,peak_mem_kb,payload_bytes,blocks_cached,blocks_uncached,flags) VALUES (%s,%u,%s,%s,%s,%u,%u,%.1F,%.1F,%u,%.1F,%.1F,%s,%u,%u,%u,%u,%u,%u)',
             $this->table($db),
             $q((string) ($row['request_id'] ?? ''), 16),
             (int) ($row['created'] ?? time()),
@@ -132,6 +133,8 @@ final class ProfileRepository
             (int) ($row['n_plus_one'] ?? 0),
             (int) ($row['peak_mem_kb'] ?? 0),
             (int) ($row['payload_bytes'] ?? 0),
+            (int) ($row['blocks_cached'] ?? 0),
+            (int) ($row['blocks_uncached'] ?? 0),
             (int) ($row['flags'] ?? 0)
         );
 
@@ -196,7 +199,7 @@ final class ProfileRepository
 
         /** @var list<ModuleAggregateRow> $rows */
         $rows = $this->fetch(sprintf(
-            "SELECT CASE WHEN dirname = '' THEN '—' ELSE dirname END AS dirname,COUNT(*) AS hits,AVG(total_ms) AS avg_ms,AVG(query_count) AS avg_queries,AVG(payload_bytes) / 1024 AS avg_payload_kb,SUM(is_fragment <> 0) AS fragment_hits,SUM(flags <> 0) AS violations FROM %s WHERE created > %u GROUP BY dirname ORDER BY avg_ms DESC LIMIT %u",
+            "SELECT CASE WHEN dirname = '' THEN '—' ELSE dirname END AS dirname,COUNT(*) AS hits,AVG(total_ms) AS avg_ms,AVG(query_count) AS avg_queries,AVG(payload_bytes) / 1024 AS avg_payload_kb,SUM(is_fragment <> 0) AS fragment_hits,SUM(flags <> 0) AS violations,AVG(blocks_cached) AS avg_blocks_cached,AVG(blocks_uncached) AS avg_blocks_uncached FROM %s WHERE created > %u GROUP BY dirname ORDER BY avg_ms DESC LIMIT %u",
             $this->table($db),
             time() - max(1, $days) * 86400,
             max(1, $limit)

@@ -61,6 +61,7 @@ declare(strict_types=1);
 \define('_AM_DEBUGBAR_AN_VIOLATIONS', 'Violations');
 \define('_AM_DEBUGBAR_AN_SAMPLE_FP', 'Sample fingerprint');
 \define('_AM_DEBUGBAR_AN_AVG_PAYLOAD', 'Avg payload KB');
+\define('_AM_DEBUGBAR_AN_BLOCKS', 'Blocks cached / uncached');
 \define('_AM_DEBUGBAR_AN_FRAGMENTS', 'Fragment hits');
 \define('_AM_DEBUGBAR_AN_WHEN', 'When');
 \define('_AM_DEBUGBAR_AN_TOTAL_MS', 'Total ms');

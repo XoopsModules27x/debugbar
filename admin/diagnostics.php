@@ -2,6 +2,19 @@
 
 declare(strict_types=1);
 
+/**
+ * XOOPS DebugBar Module - Admin System Diagnostics
+ *
+ * A read-only snapshot of the XOOPS runtime, themes, diagnostic tools, and
+ * required storage — one page to verify xdebug/opcache/monolog/whoops/ray
+ * availability and writable-directory health.
+ *
+ * @copyright       (c) 2000-2026 XOOPS Project (https://xoops.org)
+ * @license             GNU GPL 2 (https://www.gnu.org/licenses/gpl-2.0.html)
+ * @package             debugbar
+ */
+
+use Xmf\Module\Admin;
 use XoopsModules\Debugbar\Admin\AccessPolicy;
 use XoopsModules\Debugbar\Analysis\SystemDiagnostics;
 
@@ -18,6 +31,8 @@ if (! AccessPolicy::isAllowed()) {
     return;
 }
 
+/** @var Admin $adminObject */
+$adminObject = Admin::getInstance();
 $adminObject->displayNavigation(basename(__FILE__));
 
 $esc = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');

@@ -116,6 +116,9 @@ class DebugbarLogger
     /** @var array<string, array{reads:int,writes:int,deletes:int,hits:int,misses:int}> */
     private array $cacheStats = [];
 
+    /** @var array{cached: int, uncached: int} Block renders split by cache hit, stored per request. */
+    private array $blockCounts = ['cached' => 0, 'uncached' => 0];
+
     /** @var array<string, float> */
     private array $lifecycleStarts = [];
 
@@ -692,6 +695,16 @@ class DebugbarLogger
         $this->recordMessage('Mail', sprintf('%s → %s', $mail['subject'] ?? '(no subject)', $mail['to'] ?? ''), $mailSucceeded ? LogLevel::INFO : LogLevel::ERROR, $mail);
     }
 
+    /**
+     * Block renders this request, split by whether they came from cache.
+     *
+     * @return array{cached: int, uncached: int}
+     */
+    public function getBlockCounts(): array
+    {
+        return $this->blockCounts;
+    }
+
     /** Add a searchable tag to the current request profile. */
     public function tag(string $name, mixed $value = true): void
     {
@@ -1105,11 +1118,17 @@ class DebugbarLogger
             switch ($chan) {
                 case 'blocks':
                     $channel = 'Blocks';
+                    // Core dispatches the raw block name and leaves formatting
+                    // to the sub-logger (class/logger/xoopslogger.php), which is
+                    // why the status is appended here rather than taken from the
+                    // message — and why it can be translated at all.
                     $msg = $message . ': ';
                     if ((bool) ($context['cached'] ?? false)) {
                         $msg .= sprintf(_MD_DEBUGBAR_CACHED, (int) ($context['cachetime'] ?? 0));
+                        $this->blockCounts['cached']++;
                     } else {
                         $msg .= _MD_DEBUGBAR_NOT_CACHED;
+                        $this->blockCounts['uncached']++;
                     }
 
                     break;

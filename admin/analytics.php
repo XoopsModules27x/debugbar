@@ -266,13 +266,20 @@ foreach ($data['modules'] as $row) {
         // is KB at the source. Dividing again here would be wrong even with the
         // right key — and the key was wrong, so the column read 0.0 for every module.
         $esc(number_format((float) $row['avg_payload_kb'], 1)),
+        // Cached / uncached block renders per request. The uncached figure is
+        // the actionable one: it is repeated work on every single page view.
+        $esc(sprintf(
+            '%s / %s',
+            number_format((float) $row['avg_blocks_cached'], 1),
+            number_format((float) $row['avg_blocks_uncached'], 1)
+        )),
         $esc((int) $row['fragment_hits']),
         $esc((int) $row['violations']),
     ];
 }
 echo $table(
     _AM_DEBUGBAR_AN_MODULES,
-    [_AM_DEBUGBAR_AN_MODULE, _AM_DEBUGBAR_AN_HITS, _AM_DEBUGBAR_AN_AVG_MS, _AM_DEBUGBAR_AN_AVG_QUERIES, _AM_DEBUGBAR_AN_AVG_PAYLOAD, _AM_DEBUGBAR_AN_FRAGMENTS, _AM_DEBUGBAR_AN_VIOLATIONS],
+    [_AM_DEBUGBAR_AN_MODULE, _AM_DEBUGBAR_AN_HITS, _AM_DEBUGBAR_AN_AVG_MS, _AM_DEBUGBAR_AN_AVG_QUERIES, _AM_DEBUGBAR_AN_AVG_PAYLOAD, _AM_DEBUGBAR_AN_BLOCKS, _AM_DEBUGBAR_AN_FRAGMENTS, _AM_DEBUGBAR_AN_VIOLATIONS],
     $rows
 );
 
