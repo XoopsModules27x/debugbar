@@ -144,6 +144,20 @@
     word-break: break-word;
 }
 .debugbar-log-context { margin-block: .55rem 0; min-width: 36rem; }
+
+/* The raw log is the whole point of its page, so let it use the window instead
+   of sitting in a 28rem box with a screen of emptiness beneath it. Height stays
+   content-driven — a three-line log is still three lines — this only lifts the
+   ceiling to whatever the viewport allows, less the admin chrome above it. The
+   max() floor keeps it usable on a short window, and dvh (with a vh fallback for
+   older engines) accounts for mobile browser toolbars that vh gets wrong.
+   The context block inside a table row keeps its fixed cap: that one is a detail
+   opened in place, and growing it to viewport height would push the rest of the
+   table off screen. */
+.debugbar-log-raw {
+    max-height: max(24rem, calc(100vh - 26rem));
+    max-height: max(24rem, calc(100dvh - 26rem));
+}
 .debugbar-log-raw { margin: .75rem; }
 
 @media (max-width: 760px) {
