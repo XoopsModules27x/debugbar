@@ -48,6 +48,21 @@
     }
 }
 
+/* Caption under the back button: quieter than body text, but not as quiet as
+   the panel meta it replaced — a truncated log reads identically to a short one,
+   so this needs to be noticed. */
+.debugbar-log-tail-note {
+    color: #596574;
+    font-size: .85rem;
+    margin: .4rem 0 .9rem;
+}
+
+@media (prefers-color-scheme: dark) {
+    .debugbar-log-tail-note {
+        color: #aeb6bf;
+    }
+}
+
 .debugbar-log-panel {
     background: var(--bs-body-bg, #fff);
     border: 1px solid var(--bs-border-color, #d8dde3);

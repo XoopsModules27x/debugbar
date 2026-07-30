@@ -45,16 +45,21 @@ if ($requested !== '') {
     if ($contents === null) {
         echo '<p>' . $esc(_AM_DEBUGBAR_LOGS_MISSING) . '</p>';
     } else {
+        // Stated once, directly under the back button, for both log kinds. This
+        // is not decoration: the reader is looking at the tail of a file, and a
+        // log that has been truncated looks exactly like a log that is short.
+        // It used to appear only for the raw view, while the parsed view buried
+        // it in small grey meta text at the far side of the panel header.
+        echo '<p class="debugbar-log-tail-note">' . $esc(_AM_DEBUGBAR_LOGS_TAIL_NOTE) . '</p>';
         $isMonolog = $requested !== LogCatalog::SOURCE_CORE;
         if (! $isMonolog) {
-            echo '<p>' . $esc(_AM_DEBUGBAR_LOGS_TAIL_NOTE) . '</p>';
             echo '<pre class="debugbar-log-raw">' . $esc($contents) . '</pre>';
         } else {
             $entries = array_reverse((new MonologLogParser())->parse($contents));
             echo '<section class="debugbar-log-panel"><header class="debugbar-log-panel-header">'
                 . '<h3 class="debugbar-log-panel-title">' . $esc(_AM_DEBUGBAR_LOGS_ACTIVITY)
                 . ' <span class="debugbar-log-count">' . $esc(sprintf(_AM_DEBUGBAR_LOGS_ENTRY_COUNT, count($entries))) . '</span></h3>'
-                . '<span class="debugbar-log-panel-meta">' . $esc(_AM_DEBUGBAR_LOGS_NEWEST_FIRST) . ' &middot; ' . $esc(_AM_DEBUGBAR_LOGS_TAIL_NOTE) . '</span>'
+                . '<span class="debugbar-log-panel-meta">' . $esc(_AM_DEBUGBAR_LOGS_NEWEST_FIRST) . '</span>'
                 . '</header><div class="debugbar-log-table-wrap"><table class="debugbar-log-table"><thead><tr>'
                 . '<th>' . $esc(_AM_DEBUGBAR_LOGS_TIME) . '</th><th>' . $esc(_AM_DEBUGBAR_LOGS_LEVEL) . '</th>'
                 . '<th>' . $esc(_AM_DEBUGBAR_LOGS_DESCRIPTION_COLUMN) . '</th><th>' . $esc(_AM_DEBUGBAR_LOGS_CHANNEL) . '</th>'
