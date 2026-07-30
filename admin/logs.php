@@ -3,12 +3,26 @@
 declare(strict_types=1);
 
 use Xmf\Request;
+use XoopsModules\Debugbar\Admin\AccessPolicy;
 use XoopsModules\Debugbar\Analysis\LogCatalog;
 use XoopsModules\Debugbar\Analysis\MonologLogParser;
 
 require_once __DIR__ . '/admin_header.php';
-$adminObject = \Xmf\Module\Admin::getInstance();
 xoops_cp_header();
+
+// This page renders log file contents — statements, paths, and whatever a
+// module chose to log. It belongs behind the same gate as Analytics and
+// Diagnostics, which additionally require XOOPS debug mode to be on and the
+// module itself to be enabled; being a module admin alone is not the bar. This
+// was the one data-exposing page still gated only by admin_header.php.
+if (! AccessPolicy::isAllowed()) {
+    echo '<p style="color:#a00;font-weight:bold;">' . htmlspecialchars(_AM_DEBUGBAR_LOGS_FORBIDDEN, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</p>';
+    require_once __DIR__ . '/admin_footer.php';
+
+    return;
+}
+
+$adminObject = \Xmf\Module\Admin::getInstance();
 $adminObject->displayNavigation(basename(__FILE__));
 
 $varPath = defined('XOOPS_VAR_PATH') && XOOPS_VAR_PATH !== ''

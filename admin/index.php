@@ -219,6 +219,14 @@ if ($tracyControlAvailable) {
 
 // Render as a single HTML table inside one info box line
 $html = '<table style="border-collapse: collapse; width: auto;">';
+// The colour lands inside a style attribute, where escaping would not save us —
+// htmlspecialchars passes a CSS payload straight through. The XMF 2.0 line
+// allowlists the value at runtime for that reason. Here it is unnecessary and
+// deliberately absent: every row of $statusRows is built in this file from a
+// closed set of literals, and analysis proves it, so the constraint is enforced
+// statically instead. If this ever takes a colour from config or a caller, the
+// allowlist goes back in — and analysis will stop proving the invariant, which
+// is the signal to notice.
 foreach ($statusRows as $row) {
     $label = \htmlspecialchars($row[0], ENT_QUOTES, 'UTF-8');
     $value = \htmlspecialchars($row[1], ENT_QUOTES, 'UTF-8');

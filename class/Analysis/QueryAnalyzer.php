@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace XoopsModules\Debugbar\Analysis;
 
-// Pure analysis helper — safe without a booted XOOPS (unit tests load this class alone).
+defined('XOOPS_ROOT_PATH') || exit('Restricted access');
+
+// Pure analysis: no database, no core services, so a unit test can load this
+// class on its own — it only needs XOOPS_ROOT_PATH defined for the guard above,
+// which every other class in the module also carries.
 
 /**
  * Analyse the compact query log without touching the database.

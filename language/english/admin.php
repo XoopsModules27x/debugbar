@@ -184,6 +184,7 @@ declare(strict_types=1);
 
 // Analytics access control / empty states
 \define('_AM_DEBUGBAR_AN_FORBIDDEN', 'You are not allowed to view performance analytics.');
+\define('_AM_DEBUGBAR_LOGS_FORBIDDEN', 'You are not allowed to view the logs.');
 \define('_AM_DEBUGBAR_AN_NOTABLE', 'The performance analytics table does not exist yet. Update the module to create it.');
 \define('_AM_DEBUGBAR_AN_DELETE', 'Delete');
 
