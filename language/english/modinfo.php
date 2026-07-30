@@ -59,6 +59,8 @@ define('_MI_DEBUGBAR_EXPLAIN_SLOW', 'EXPLAIN slow queries');
 define('_MI_DEBUGBAR_EXPLAIN_SLOW_DSC', 'Run EXPLAIN on the slowest SELECTs and flag full scans / filesorts (dev mode only)');
 define('_MI_DEBUGBAR_COPY_REDACT', 'Redact secrets in copied output');
 define('_MI_DEBUGBAR_COPY_REDACT_DSC', 'Mask password/token/session/cookie values in the Copy-to-clipboard output. Display in the bar is never redacted.');
+define('_MI_DEBUGBAR_EDITOR_LINK', 'Editor for source links');
+define('_MI_DEBUGBAR_EDITOR_LINK_DSC', 'Which editor the file:line links in the toolbar should open. Ignored when php.ini sets xdebug.file_link_format, which already selects an editor for the whole stack.');
 define('_MI_DEBUGBAR_MONOLOG_ENABLE', 'Enable Monolog file logging');
 define('_MI_DEBUGBAR_MONOLOG_ENABLE_DSC', 'Write XOOPS warnings and more severe messages to the protected xoops_data logs directory.');
 define('_MI_DEBUGBAR_MONOLOG_LEVEL', 'Monolog minimum level');

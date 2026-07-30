@@ -255,3 +255,32 @@ $modversion['config'][] = [
     'valuetype'   => 'int',
     'default'     => 1,
 ];
+
+// --- Editor for clickable source locations ---
+// Ignored when php.ini sets xdebug.file_link_format, which already tells the
+// whole stack which editor to open.
+$modversion['config'][] = [
+    'name'        => 'editor_link',
+    'title'       => '_MI_DEBUGBAR_EDITOR_LINK',
+    'description' => '_MI_DEBUGBAR_EDITOR_LINK_DSC',
+    'formtype'    => 'select',
+    'valuetype'   => 'text',
+    'default'     => 'vscode',
+    'options'     => [
+        'VS Code'          => 'vscode',
+        'VS Code Insiders' => 'vscode-insiders',
+        'VSCodium'         => 'vscodium',
+        'PhpStorm'         => 'phpstorm',
+        'IntelliJ IDEA'    => 'idea',
+        'Cursor'           => 'cursor',
+        'Windsurf'         => 'windsurf',
+        'Zed'              => 'zed',
+        'Sublime Text'     => 'sublime',
+        'Netbeans'         => 'netbeans',
+        'Atom'             => 'atom',
+        'Emacs'            => 'emacs',
+        'MacVim'           => 'macvim',
+        'Nova'             => 'nova',
+        'Xdebug protocol'  => 'xdebug',
+    ],
+];

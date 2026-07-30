@@ -229,14 +229,41 @@ class DebugbarLogger
                     }
                 }
 
-                // Preserve source context for diagnostic messages.
-                foreach (['messages', 'Deprecated'] as $collectorName) {
+                // Clickable source locations. This block previously said it
+                // preserved source context while calling collectFileTrace(false)
+                // — which is the library's own default, so it did nothing at all.
+                // The toolbar has rendered editor links for four kinds of row
+                // since it was written; it simply never received a file to link,
+                // because nothing turned the trace on and no editor template was
+                // ever set. Both halves are now connected.
+                //
+                // Excluding the logger and this module from the backtrace matters:
+                // without it every link points at the debugbar's own dispatch
+                // rather than the code that logged the message.
+                foreach (['messages', 'Deprecated', 'Blocks', 'Extra', 'Queries', 'Cache', 'HTTP', 'Mail', 'Events', 'Templates'] as $collectorName) {
                     if ($this->debugbar->hasCollector($collectorName)) {
                         $collector = $this->debugbar->getCollector($collectorName);
                         if ($collector instanceof MessagesCollector) {
-                            $collector->collectFileTrace(false);
+                            $collector->collectFileTrace(true);
+                            $collector->addBacktraceExcludePaths(['/class/logger/', '/modules/debugbar/']);
                         }
                     }
+                }
+                // php.ini's xdebug.file_link_format wins when set — a developer
+                // who configured that already told the whole stack which editor
+                // they use, and overriding it here would be presumptuous.
+                if ('' === (string) ini_get('xdebug.file_link_format')) {
+                    $editor = 'vscode';
+
+                    try {
+                        $configured = (string) (Helper::getInstance()->getConfig('editor_link') ?? '');
+                        if ('' !== $configured) {
+                            $editor = $configured;
+                        }
+                    } catch (\Throwable) {
+                        // Config unavailable this early; the default stands.
+                    }
+                    $this->debugbar->setEditor($editor);
                 }
 
                 // v1.x: disable jQuery (already loaded by XOOPS) and noConflict wrapping
