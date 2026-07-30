@@ -1,4 +1,4 @@
-# DebugBar 1.5.0 file inventory
+# DebugBar 1.4.0 file inventory
 
 This inventory describes the standalone `modules/debugbar` release tree. The three peer-review working notes (`claude.md`, `grok.md`, and `codex.md`) are development artifacts and are not included in the release count.
 

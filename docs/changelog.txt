@@ -1,4 +1,4 @@
-<h5>1.5.0 - [2026-07-29]</h5>
+<h5>1.4.0 - [2026-07-29]</h5>
 <hr>
 
 Reconciles this module with the parallel copy maintained on the XMF 2.0 line, harvesting what that line did better and fixing three features that had shipped without working.
@@ -8,24 +8,6 @@ Reconciles this module with the parallel copy maintained on the XMF 2.0 line, ha
 - Added call-site attribution to query findings. The N+1 and duplicate detection could report that sixty-two identical statements ran but not which code ran them. A trimmed backtrace is now captured with each query, dropping the database drivers, the logger, this module and the generic persistence layer as never being the interesting caller, and the analyzer groups the surviving frames per statement and per shape, ranked by frequency. On the first real page it saw this named a genuine N+1 in Publisher: sixty-two executions from ItemHandler.php:255 and sixty-one from class/model/stats.php:52. Capture happens inside the existing query-log cap, so the cost stays bounded.
 - Added a Boot / SQL / App time split, naming whichever segment dominated the request — the granularity that decides what to do next, since a request dominated by App time will not be improved by query tuning. It appears on the Performance panel, and the Server-Timing header now reports boot, db with its query count, app and total instead of one lumped figure.
 - Added the per-request block cache split. A front page rendering nineteen uncached blocks pays nineteen block renders, each with its own queries, on every view. blocks_cached and blocks_uncached are stored per profile and averaged into the per-module Analytics table. Existing installations gain the columns through an idempotent migration.
-
-<h5>Fixed</h5>
-
-- Connected the editor source links, which had never worked. The toolbar has rendered clickable file:line links for four kinds of row since it was written, but nothing gave them a file: the logger called collectFileTrace(false), which is the library's own default and therefore a no-op, and no editor template was ever set. Both halves are now wired across every message collector, with the logger and this module excluded from the backtrace. An editor_link preference chooses the scheme; xdebug.file_link_format in php.ini takes precedence when set.
-- Gated the Logs page against the full access policy. It renders log file contents but was gated only by admin_header.php, so being a module admin was enough, while Analytics and Diagnostics additionally require debug mode to be on and the module enabled.
-- Inferred the core's block-logging contract instead of assuming one, so the status is neither doubled nor untranslatable depending on which core the module runs on.
-- Added the direct-access guard to LogCatalog, MonologLogParser and QueryAnalyzer, the only three classes without it.
-
-<h5>Changed</h5>
-
-- A test now enumerates which admin pages must sit behind the access policy and which must not, and checks each refusal is escaped and its language constant defined. Nothing pinned that set before, which is why the Logs page omission was invisible.
-- The vitals and block-counter migrations share one helper instead of repeating the information_schema existence check. sql/mysql.sql adopts the XMF line's column-per-line layout.
-
-<h5>1.4.0 - [2026-07-28]</h5>
-<hr>
-
-<h5>Added</h5>
-
 - Added real-user monitoring: assets/xoops-debugbar-rum.js collects field web vitals (LCP, INP, CLS) in the browser and posts them to a new beacon.php endpoint via navigator.sendBeacon(), which attaches them to the matching stored profile. The Analytics page gained a Field web-vitals table of per-URL averages. The endpoint is POST-only and gated on module admin, XOOPS debug mode, a DEBUGBAR_RUM token, and a shape-validated request id.
 - Added an Xdebug profile viewer. CachegrindParser reads cachegrind.out.* output (plain or gzip-compressed) into an immutable CachegrindResult, and the Analytics page lists profiles with creator, command, total cost, and a top-functions breakdown by inclusive/self cost. Profiles can be deleted individually or purged, both behind CSRF tokens.
 - Added AssetScanner, which scans rendered HTML for script and stylesheet tags, sums local asset sizes, and flags a duplicated JavaScript runtime (two copies of jQuery, Alpine, htmx, and similar) on one page.
@@ -41,6 +23,10 @@ Reconciles this module with the parallel copy maintained on the XMF 2.0 line, ha
 
 <h5>Fixed</h5>
 
+- Connected the editor source links, which had never worked. The toolbar has rendered clickable file:line links for four kinds of row since it was written, but nothing gave them a file: the logger called collectFileTrace(false), which is the library's own default and therefore a no-op, and no editor template was ever set. Both halves are now wired across every message collector, with the logger and this module excluded from the backtrace. An editor_link preference chooses the scheme; xdebug.file_link_format in php.ini takes precedence when set.
+- Gated the Logs page against the full access policy. It renders log file contents but was gated only by admin_header.php, so being a module admin was enough, while Analytics and Diagnostics additionally require debug mode to be on and the module enabled.
+- Inferred the core's block-logging contract instead of assuming one, so the status is neither doubled nor untranslatable depending on which core the module runs on.
+- Added the direct-access guard to LogCatalog, MonologLogParser and QueryAnalyzer, the only three classes without it.
 - Defined 45 _AM_DEBUGBAR_* language constants that the Analytics, Diagnostics, and Ray admin pages referenced but that were never declared. Referencing an undefined constant is a fatal error on PHP 8, so the affected panels crashed rather than rendering.
 - Truncated each stored profile column to its own width instead of a single shared 500-character cap. slowest_fp is a normalised SQL fingerprint and routinely exceeds its VARCHAR(255); under MySQL strict mode the oversized insert raised error 1406, which the surrounding catch swallowed, so affected profiles were silently never recorded.
 - Recorded the slowest query over every statement rather than only those past the slow-query threshold. On pages where nothing crossed the threshold, slowest_ms was stored as 0.0 and slowest_fp as an empty string, making the Analytics slowest columns and worst-URL ranking wrong.
@@ -54,17 +40,19 @@ Reconciles this module with the parallel copy maintained on the XMF 2.0 line, ha
 - Corrected the per-module "Avg payload KB" column on the Analytics page, which read avg_payload where the query selects avg_payload_kb. The missing key evaluated to (float) null, so the column showed 0.0 for every module; it also divided by 1024 a second time, which the query had already done.
 - Carried trigger_value_set on XdebugStatus::read()'s never-throw fallback path, which returned one key fewer than its success path.
 
-<h5>Changed</h5>
-
-- Replaced the "Profile this request" mechanism. The button previously appended XDEBUG_TRIGGER to the current URL and reloaded, with no server-side gate: the address was replayable by anyone and passed through history, Referer headers and access logs. It now posts to a new xdebug-arm.php, which sets a 60-second one-shot trigger cookie only after checking POST, the shared AccessPolicy decision, a single-use DEBUGBAR_XDEBUG token, and Xdebug's readiness. The cookie is consumed and deleted on the next request whatever the outcome. The xdebug_button_enable preference is unchanged.
-- Capped each query-findings list (slow queries, duplicates, N+1 groups, similar shapes) at ten entries. A page issuing thousands of queries previously emitted one entry per finding into the Performance panel, the flight-recorder dump, and the warning log. Reported counts remain exact.
-- Sealed the Analytics view model. ProfileRepository, XdebugStatus::read() and AnalyticsBuilder::build() returned untyped arrays, so static analysis could not check any of the admin page's key accesses, and three key-mismatch bugs had already shipped behind that blind spot. Each producer now declares the exact keys it returns, so the page reading a key that is not in the shape is an analysis error rather than a blank cell. The shapes are asserted at the query boundary rather than derived from the SQL, so they catch a mistake in the page but not a renamed alias in the query itself; each shape is kept directly above the query it describes.
-- Expanded the unit suite from 4 tests to 53 (214 assertions), covering the admin access policy, diagnostic sanitiser, SQL redactor and EXPLAIN stash redaction, Monolog log parsing and cataloguing, system diagnostics, endpoint gating, and profile-schema consistency.
-
 <h5>Security</h5>
 
 - Reworked the on-demand EXPLAIN endpoint so the browser never sends SQL. The client now posts a request id and a statement hash, and the server resolves them against a short-lived stash it recorded itself, rejecting anything that is not a SELECT. Generic JSON errors leak neither SQL nor paths.
 - Added SqlRedactor, which rewrites every string literal to '' and every numeric literal to 0 before a statement is stashed for EXPLAIN, so no session id, password, or token value is persisted.
+
+<h5>Changed</h5>
+
+- A test now enumerates which admin pages must sit behind the access policy and which must not, and checks each refusal is escaped and its language constant defined. Nothing pinned that set before, which is why the Logs page omission was invisible.
+- The vitals and block-counter migrations share one helper instead of repeating the information_schema existence check. sql/mysql.sql adopts the XMF line's column-per-line layout.
+- Replaced the "Profile this request" mechanism. The button previously appended XDEBUG_TRIGGER to the current URL and reloaded, with no server-side gate: the address was replayable by anyone and passed through history, Referer headers and access logs. It now posts to a new xdebug-arm.php, which sets a 60-second one-shot trigger cookie only after checking POST, the shared AccessPolicy decision, a single-use DEBUGBAR_XDEBUG token, and Xdebug's readiness. The cookie is consumed and deleted on the next request whatever the outcome. The xdebug_button_enable preference is unchanged.
+- Capped each query-findings list (slow queries, duplicates, N+1 groups, similar shapes) at ten entries. A page issuing thousands of queries previously emitted one entry per finding into the Performance panel, the flight-recorder dump, and the warning log. Reported counts remain exact.
+- Sealed the Analytics view model. ProfileRepository, XdebugStatus::read() and AnalyticsBuilder::build() returned untyped arrays, so static analysis could not check any of the admin page's key accesses, and three key-mismatch bugs had already shipped behind that blind spot. Each producer now declares the exact keys it returns, so the page reading a key that is not in the shape is an analysis error rather than a blank cell. The shapes are asserted at the query boundary rather than derived from the SQL, so they catch a mistake in the page but not a renamed alias in the query itself; each shape is kept directly above the query it describes.
+- Expanded the unit suite from 4 tests to 53 (214 assertions), covering the admin access policy, diagnostic sanitiser, SQL redactor and EXPLAIN stash redaction, Monolog log parsing and cataloguing, system diagnostics, endpoint gating, and profile-schema consistency.
 
 <h5>Removed</h5>
 

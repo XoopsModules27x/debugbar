@@ -40,6 +40,7 @@ The following settings are a practical starting point:
 | Maximum stored profiles | 10000 | Adds a hard storage limit. |
 | Enable Monolog file logging | Yes | Adds structured file logs when Monolog is available. |
 | Collect browser web-vitals (RUM beacon) | Yes | Reports LCP, INP, and CLS from real administrator sessions, which is the only way to see slowness the server does not cause. |
+| Editor for source links | Whichever editor you use | Makes the `file:line` locations in the toolbar clickable, opening the file at that line. Ignored when `php.ini` sets `xdebug.file_link_format`, which already selects an editor for the whole stack. |
 | Collect preload events | No; Yes while chasing a preload or bootstrap problem | Adds the Events tab. Cheap to run, but it is diagnostic detail you only need while looking for it. |
 | Collect template resolution | No; Yes while working on themes or overrides | Adds the Templates tab. Turn it on for the one question it answers — which file served which template — then turn it off. |
 
@@ -52,6 +53,8 @@ The **Bootstrap time budget** uses the measured `XOOPS Boot` lifecycle duration 
 Load the page you want to investigate and expand the toolbar at the bottom of the browser. Every collector below is one tab. On a narrow screen the tabs collapse to icons; the tab you are currently viewing keeps its name, so the toolbar always states which collector is open.
 
 The examples in this section all come from one deliberately slow page — a Publisher article that crossed three configured budgets — so that each collector has something to show. Read them together: the point of the toolbar is that twenty collectors describe *the same request* from different angles, and the answer is usually where two of them disagree.
+
+**File locations are clickable throughout.** Wherever a panel shows a `file:line` — a message's source, a deprecation, a query's call site — clicking it opens that file at that line in your editor. Choose which editor under **Editor for source links** in the module preferences; if `php.ini` already sets `xdebug.file_link_format`, that takes precedence and the preference is ignored. This is what turns a finding into an edit, and it pairs with the call-site attribution described under Performance below: that names the line, this takes you to it.
 
 ### Messages
 
@@ -134,6 +137,18 @@ The plan appears beneath the row's context:
 **Shows:** DebugBar's own verdict on the request — which budget flags were raised, the findings behind them, N+1 candidates, similar query shapes, and duplicated JavaScript runtimes.
 
 **What to do with it:** this is the summary the stored profile keeps, so it is also what the Analytics violations feed and the flight recorder will show for this request. `N+1 candidates` lists exact repeats; `Similar shapes` lists parameterized statements with several distinct variants, which is the classic id-loop. `Duplicate runtimes: none` is a real result, not an empty panel — the page was scanned and no library was loaded twice.
+
+**Read the `from` field on every finding.** Each N+1 candidate and similar shape now names the code that issued the statements, as a root-relative `file:line`, with a count when one call site accounts for several of them. That is the difference between knowing a page runs sixty-two identical queries and knowing which handler to open. A real example from a Publisher category page: sixty-two executions attributed to `/modules/publisher/class/ItemHandler.php:255` reached from `:343`, and sixty-one more to `/class/model/stats.php:52` via `CategoryHandler.php:344`. Two call sites, and the whole fault is described.
+
+The frames belonging to the database drivers, the logger, this module and XOOPS's generic persistence layer are dropped, because they are never the answer — the frame you want is the first one in module or kernel code. At most two are kept per statement; a third rarely changes the decision.
+
+**`Time split`** breaks the request into `Boot`, `SQL` and `App`, which is the coarsest useful answer to "where did the time go" and the one that decides what to do next:
+
+- **App** dominant means the time is in PHP that is neither bootstrap nor database. No amount of query tuning will help; go to section 8's "Where is the time going inside PHP?" and profile it.
+- **SQL** dominant sends you to the Queries panel and the N+1 findings above.
+- **Boot** dominant is a bootstrap problem — usually a preload, which the Events tab will name — and not anything in the module you are looking at.
+
+The same split is emitted as a `Server-Timing` response header (`boot`, `db` with its query count, `app`, `total`), so your browser's own network panel shows the same breakdown without opening the toolbar. That is the one way to read these numbers on a request whose response never renders the bar, such as a redirect or a JSON endpoint.
 
 ### Lifecycle
 
@@ -232,7 +247,7 @@ Choose a 1-, 7-, or 30-day window and review:
 
 - **Worst offenders** for slow URLs and high query counts;
 - the **N+1 leaderboard** for repeated query shapes;
-- **Per-module comparison** for average time, queries, payload, and violations;
+- **Per-module comparison** for average time, queries, payload, violations, and the average **blocks cached / uncached** split per request;
 - **Recent budget violations** to see which limit was crossed;
 - **Field web vitals** for per-URL LCP, INP, and CLS measured in real administrator sessions, shown beside the server time for the same requests;
 - **Flight recorder** records containing bounded request metrics and findings;
@@ -242,6 +257,8 @@ Choose a 1-, 7-, or 30-day window and review:
 ![The Worst offenders table listing URL, module, hits, average and maximum milliseconds, average queries, worst N+1 count, and violations for the slowest URLs.](images/02a-analytics-worst-offenders.png)
 
 The stored URL is reduced to its path, so query-string secrets are not used as the Analytics identity. Profile storage is bounded by both retention days and maximum row count.
+
+**The blocks column is the one most worth acting on.** The Blocks tab shows the cache split for one request, which cannot tell you whether that request was unusual. This column averages it across the window, per module, so a module reporting `0.0 / 19.0` is rendering nineteen uncached blocks on every view — nineteen block renders, each with its own queries, repeated for every visitor. Blocks whose content changes rarely (menus, categories, "Who is Online") are usually safe to cache, and turning caching on for those routinely removes more request time than any code change. Sort your attention by the uncached figure, not by average milliseconds.
 
 ### A useful optimization loop
 
@@ -369,6 +386,8 @@ The value of the fingerprint column is visible in that example: a single `SELECT
 
 **Reproduce with full logging, briefly.** Set Query Logging to **All queries**, reload the worst URL once, and set it straight back to **Slow & errors only**. In the **Queries** collector the repeats are marked `DUP` with an execution count.
 
+**Read the call site, then open it.** The **Performance** panel's `N+1 candidates` and `Similar shapes` name the code that issued the repeats, as `file:line`, and those locations are clickable. That is normally where this investigation ends: you go straight from "this URL runs 62 identical queries" to the handler method responsible, without grepping for the statement.
+
 **Confirm the shape.** An N+1 looks like one query that loads a list, followed by many near-identical queries that differ only in an id. The fix is a join, a bulk `IN (...)` lookup, or preloading through the handler — not caching the symptom.
 
 **Check the plan for the ones that are genuinely slow.** Use the **EXPLAIN** action beside a recorded read-only query and look for full table scans, temporary tables, and filesorts. The client never sends SQL to the server for this: it references a statement the server already recorded, so the plan you see is for the statement that actually ran.
@@ -400,6 +419,8 @@ Turn the preferences off afterwards. Smarty collection adds work on every reques
 ### “Where is the time going inside PHP?”
 
 Reach for this when the timeline shows the time is in PHP rather than SQL, but not *which* PHP.
+
+**Confirm that first, in one glance.** The **Performance** panel's `Time split` gives Boot, SQL and App for the request. If `App` is the largest, the time genuinely is in PHP and an Xdebug profile is the right next step. If `SQL` is largest you are in the wrong section — go back to "The database server is busy". Arming a profiler to discover you had a query problem wastes a capture and a lot of reading.
 
 Configure Xdebug for trigger-based profiling, then arm one capture with **Profile this request** (see section 7). Open **Analytics > Xdebug profiles**, select the generated file, and read the top functions by cost. Two columns matter and they answer different questions:
 
