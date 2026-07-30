@@ -1,3 +1,26 @@
+<h5>1.5.0 - [2026-07-29]</h5>
+<hr>
+
+Reconciles this module with the parallel copy maintained on the XMF 2.0 line, harvesting what that line did better and fixing three features that had shipped without working.
+
+<h5>Added</h5>
+
+- Added call-site attribution to query findings. The N+1 and duplicate detection could report that sixty-two identical statements ran but not which code ran them. A trimmed backtrace is now captured with each query, dropping the database drivers, the logger, this module and the generic persistence layer as never being the interesting caller, and the analyzer groups the surviving frames per statement and per shape, ranked by frequency. On the first real page it saw this named a genuine N+1 in Publisher: sixty-two executions from ItemHandler.php:255 and sixty-one from class/model/stats.php:52. Capture happens inside the existing query-log cap, so the cost stays bounded.
+- Added a Boot / SQL / App time split, naming whichever segment dominated the request — the granularity that decides what to do next, since a request dominated by App time will not be improved by query tuning. It appears on the Performance panel, and the Server-Timing header now reports boot, db with its query count, app and total instead of one lumped figure.
+- Added the per-request block cache split. A front page rendering nineteen uncached blocks pays nineteen block renders, each with its own queries, on every view. blocks_cached and blocks_uncached are stored per profile and averaged into the per-module Analytics table. Existing installations gain the columns through an idempotent migration.
+
+<h5>Fixed</h5>
+
+- Connected the editor source links, which had never worked. The toolbar has rendered clickable file:line links for four kinds of row since it was written, but nothing gave them a file: the logger called collectFileTrace(false), which is the library's own default and therefore a no-op, and no editor template was ever set. Both halves are now wired across every message collector, with the logger and this module excluded from the backtrace. An editor_link preference chooses the scheme; xdebug.file_link_format in php.ini takes precedence when set.
+- Gated the Logs page against the full access policy. It renders log file contents but was gated only by admin_header.php, so being a module admin was enough, while Analytics and Diagnostics additionally require debug mode to be on and the module enabled.
+- Inferred the core's block-logging contract instead of assuming one, so the status is neither doubled nor untranslatable depending on which core the module runs on.
+- Added the direct-access guard to LogCatalog, MonologLogParser and QueryAnalyzer, the only three classes without it.
+
+<h5>Changed</h5>
+
+- A test now enumerates which admin pages must sit behind the access policy and which must not, and checks each refusal is escaped and its language constant defined. Nothing pinned that set before, which is why the Logs page omission was invisible.
+- The vitals and block-counter migrations share one helper instead of repeating the information_schema existence check. sql/mysql.sql adopts the XMF line's column-per-line layout.
+
 <h5>1.4.0 - [2026-07-28]</h5>
 <hr>
 

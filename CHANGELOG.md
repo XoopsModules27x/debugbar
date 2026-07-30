@@ -4,6 +4,28 @@ All notable changes to the XOOPS DebugBar module are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses semantic versioning.
 
+## [1.5.0] - 2026-07-29
+
+Reconciles this module with the parallel copy maintained on the XMF 2.0 line, harvesting what that line did better and fixing three features that had shipped without working.
+
+### Added
+
+- Added call-site attribution to query findings. The N+1 and duplicate detection could report that sixty-two identical statements ran but not which code ran them, leaving the file to be found by reading source. A trimmed backtrace is now captured with each query — the database drivers, the logger, this module and the generic persistence layer are dropped as never being the interesting caller — and the analyzer groups the surviving frames per statement and per shape, ranked by frequency. On the first real page it saw this named a genuine N+1 in Publisher: sixty-two executions from `ItemHandler.php:255` and sixty-one from `class/model/stats.php:52`. Capture happens inside the existing query-log cap, so the cost stays bounded.
+- Added a Boot / SQL / App time split, naming whichever segment dominated the request. This is the granularity that decides what to do next: a request dominated by App time will not be improved by query tuning, and one dominated by Boot is a bootstrap problem rather than anything in the module. It appears on the Performance panel, and the `Server-Timing` header now reports boot, db with its query count, app and total instead of one lumped figure, so the browser's own performance panel shows the same breakdown the Timeline does.
+- Added the per-request block cache split. A front page rendering nineteen uncached blocks pays nineteen block renders, each with its own queries, on every view; the Blocks panel showed that one request at a time, which is the wrong granularity for deciding what to fix. `blocks_cached` and `blocks_uncached` are stored per profile and averaged into the per-module Analytics table. Existing installations gain the columns through an idempotent migration.
+
+### Fixed
+
+- Connected the editor source links, which had never worked. The toolbar has rendered clickable `file:line` links for four kinds of row since it was written, but nothing ever gave them a file: the logger called `collectFileTrace(false)` — the library's own default, so a no-op — under a comment claiming it preserved source context, and no editor template was ever set. Both halves are now wired across every message collector, with the logger and this module excluded from the backtrace so a link points at the code that logged the message rather than the debugbar's own dispatch. An `editor_link` preference chooses the scheme; `xdebug.file_link_format` in php.ini takes precedence when set.
+- Gated the Logs page against the full access policy. It renders log file contents — statements, paths, and whatever a module chose to log — but was gated only by `admin_header.php`, so being a module admin was enough, while Analytics and Diagnostics additionally require XOOPS debug mode to be on and the module itself enabled. A site that had finished debugging, with the module disabled, still served its logs to anyone holding the admin bit.
+- Inferred the core's block-logging contract instead of assuming one. XOOPS 2.7.3 dispatches the raw block name and leaves formatting to the sub-logger, while the XMF 2.0 line pre-formats the message itself; appending the status unconditionally doubles it on the second, and taking the message as given loses translation on the first. The contract is now read from the data.
+- Added the direct-access guard to `LogCatalog`, `MonologLogParser` and `QueryAnalyzer`, the only three classes in the module without it.
+
+### Changed
+
+- A test now enumerates which admin pages must sit behind the access policy and which must not, since gating navigation or layout would break the control panel. It also checks each refusal is escaped, uses a language constant, and that the constant is defined — an undefined one is a fatal on PHP 8, which is worse than no gate at all. Nothing pinned that set before, which is why the Logs page omission was invisible.
+- The Core Web Vitals and block-counter migrations now share one helper instead of repeating the `information_schema` existence check; a third copy was the point at which that stopped being acceptable. `sql/mysql.sql` adopts the XMF line's column-per-line layout.
+
 ## [1.4.0] - 2026-07-28
 
 ### Added
