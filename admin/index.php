@@ -213,8 +213,16 @@ $statusRows = [
     [_AM_DEBUGBAR_XOOPS_DEBUG, $xoopsDebugEnabled ? _AM_DEBUGBAR_ENABLED : _AM_DEBUGBAR_DISABLED, $xoopsDebugEnabled ? 'green' : 'orange'],
     [_AM_DEBUGBAR_TOOLBAR, $debugbarToolbarActive ? _AM_DEBUGBAR_ENABLED : ($debugbarPreferenceEnabled ? _AM_DEBUGBAR_WAITING_FOR_XOOPS_DEBUG : _AM_DEBUGBAR_DISABLED), $debugbarToolbarActive ? 'green' : 'orange'],
 ];
+// Always reported, like the Ray row above, rather than hidden when unavailable.
+// Three distinct states matter to an administrator and "no row at all" tells
+// them none of them: Tracy is running, Tracy is available but switched off, or
+// this installation does not expose the bootstrap control (XOOPS_TRACY_STATUS is
+// defined in mainfile.php, so 2.7.x installations generally do not have it).
+// Silence read as "not supported" on the very line where it means "not present".
 if ($tracyControlAvailable) {
     $statusRows[] = [_AM_DEBUGBAR_TRACY, $tracyActive ? _AM_DEBUGBAR_ENABLED : _AM_DEBUGBAR_DISABLED, $tracyActive ? 'green' : 'gray'];
+} else {
+    $statusRows[] = [_AM_DEBUGBAR_TRACY, _AM_DEBUGBAR_NOT_INSTALLED, 'gray'];
 }
 
 // Render as a single HTML table inside one info box line

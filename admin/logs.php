@@ -40,7 +40,7 @@ echo '<link rel="stylesheet" href="' . $esc(XOOPS_URL . '/modules/debugbar/asset
 
 echo '<h2>' . $esc(_AM_DEBUGBAR_LOGS_TITLE) . '</h2>';
 if ($requested !== '') {
-    echo '<p><a href="logs.php">&larr; ' . $esc(_AM_DEBUGBAR_LOGS_BACK) . '</a></p>';
+    echo '<p><a class="debugbar-log-back" href="logs.php">&larr; ' . $esc(_AM_DEBUGBAR_LOGS_BACK) . '</a></p>';
     $contents = $catalog->read($requested);
     if ($contents === null) {
         echo '<p>' . $esc(_AM_DEBUGBAR_LOGS_MISSING) . '</p>';

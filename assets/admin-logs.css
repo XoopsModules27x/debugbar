@@ -1,3 +1,53 @@
+/* "Back to Logs" reads as a link but is the page's primary control, so it gets
+   button affordance. Styled here rather than inline so it can carry hover and
+   keyboard focus states, which a bare link and an inline style attribute both
+   lack.
+
+   Deliberately literal colours, not var(--bs-*): the XOOPS admin themes define
+   none of those custom properties, so every var() here resolved to its fallback
+   and only looked theme-aware. A prefers-color-scheme block does the job the
+   variables were supposed to do. !important on the background because admin
+   themes commonly reset anchor backgrounds with a more specific selector. */
+.debugbar-log-back {
+    background-color: #eee !important;
+    border: 1px solid #bbb;
+    border-radius: .35rem;
+    color: #333 !important;
+    display: inline-block;
+    font-weight: 700;
+    line-height: 1.2;
+    padding: .4rem .75rem;
+    text-decoration: none;
+}
+
+.debugbar-log-back:hover,
+.debugbar-log-back:focus-visible {
+    background-color: #e2e6ea !important;
+    border-color: #9aa1a9;
+    color: #111 !important;
+    text-decoration: none;
+}
+
+.debugbar-log-back:focus-visible {
+    outline: 2px solid #0d6efd;
+    outline-offset: 2px;
+}
+
+@media (prefers-color-scheme: dark) {
+    .debugbar-log-back {
+        background-color: #2b3138 !important;
+        border-color: #454d56;
+        color: #e6e9ec !important;
+    }
+
+    .debugbar-log-back:hover,
+    .debugbar-log-back:focus-visible {
+        background-color: #353c44 !important;
+        border-color: #5a636d;
+        color: #fff !important;
+    }
+}
+
 .debugbar-log-panel {
     background: var(--bs-body-bg, #fff);
     border: 1px solid var(--bs-border-color, #d8dde3);
