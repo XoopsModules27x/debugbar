@@ -14,6 +14,8 @@ define('_MI_DEBUGBAR_ENABLE', 'Display DebugBar');
 define('_MI_DEBUGBAR_SMARTYDEBUG', 'Enable Smarty Debug');
 define('_MI_DEBUGBAR_FILESDEBUG', 'Enable Included Files Tab');
 define('_MI_DEBUGBAR_FILESDEBUG_DSC', 'Show all PHP files loaded during the request');
+define('_MI_DEBUGBAR_TRACE_DEPTH', 'Trace depth in DebugBar');
+define('_MI_DEBUGBAR_TRACE_DEPTH_DSC', 'Maximum backtrace frames rendered per message in the bar. The full trace is still written to the log file.');
 define('_MI_DEBUGBAR_SLOWQUERY', 'Slow Query Threshold (seconds)');
 define('_MI_DEBUGBAR_SLOWQUERY_DSC', 'Queries slower than this are highlighted in red (e.g. 0.05 = 50ms)');
 
@@ -60,7 +62,7 @@ define('_MI_DEBUGBAR_EXPLAIN_SLOW_DSC', 'Run EXPLAIN on the slowest SELECTs and 
 define('_MI_DEBUGBAR_COPY_REDACT', 'Redact secrets in copied output');
 define('_MI_DEBUGBAR_COPY_REDACT_DSC', 'Mask password/token/session/cookie values in the Copy-to-clipboard output. Display in the bar is never redacted.');
 define('_MI_DEBUGBAR_EDITOR_LINK', 'Editor for source links');
-define('_MI_DEBUGBAR_EDITOR_LINK_DSC', 'Which editor the file:line links in the toolbar should open. Ignored when php.ini sets xdebug.file_link_format, which already selects an editor for the whole stack.');
+define('_MI_DEBUGBAR_EDITOR_LINK_DSC', 'Editor that opens when clicking a source location in the DebugBar. Ignored when php.ini xdebug.file_link_format is set (that takes precedence).');
 define('_MI_DEBUGBAR_MONOLOG_ENABLE', 'Enable Monolog file logging');
 define('_MI_DEBUGBAR_MONOLOG_ENABLE_DSC', 'Write XOOPS warnings and more severe messages to the protected xoops_data logs directory.');
 define('_MI_DEBUGBAR_MONOLOG_LEVEL', 'Monolog minimum level');
@@ -90,3 +92,14 @@ define('_MI_DEBUGBAR_ANALYTICS', _MI_DEBUGBAR_MENU_ANALYTICS);
 \define('_MI_DEBUGBAR_DISCLAIMER', 'Disclaimer');
 \define('_MI_DEBUGBAR_LICENSE', 'License');
 \define('_MI_DEBUGBAR_SUPPORT', 'Support');
+
+// Preferences section dividers (line_break). Values carry <strong> markup so
+// the header renders bold; XOOPS emits a constant title unescaped (a plain
+// string title would be HTML-escaped and show the tags literally).
+\define('_MI_DEBUGBAR_HDR_GENERAL', '<strong>General</strong>');
+\define('_MI_DEBUGBAR_HDR_INTEGRATIONS', '<strong>Integrations &amp; external tools</strong>');
+\define('_MI_DEBUGBAR_HDR_QUERIES', '<strong>Queries &amp; SQL</strong>');
+\define('_MI_DEBUGBAR_HDR_PERFORMANCE', '<strong>Performance</strong>');
+\define('_MI_DEBUGBAR_HDR_PROFILES', '<strong>Profiles &amp; Analytics</strong>');
+\define('_MI_DEBUGBAR_HDR_PRIVACY', '<strong>Privacy</strong>');
+\define('_MI_DEBUGBAR_HDR_ADVANCED', '<strong>Advanced: core-seam collectors</strong>');

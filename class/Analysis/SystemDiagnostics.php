@@ -45,6 +45,8 @@ final class SystemDiagnostics
                 ),
                 $this->row('environment', defined('XOOPS_ENV') ? (string) XOOPS_ENV : 'Not defined', 'info'),
                 $this->row('timezone', date_default_timezone_get(), 'info'),
+                $this->errorHandlerRow(),
+                $this->sqlModeRow(),
             ],
             'themes' => [
                 $this->directoryRow('front_theme', $frontTheme, $this->rootPath . '/themes/' . $frontTheme),
@@ -126,6 +128,131 @@ final class SystemDiagnostics
         }
 
         return $this->row($id, 'Not installed', 'info');
+    }
+
+    /**
+     * Who currently holds PHP's error handler.
+     *
+     * The only state on this page that is invisible everywhere else AND silently disables
+     * features when it changes. PHP has one error handler; whoever calls
+     * set_error_handler() last owns it. When it is taken away from XoopsLogger, DebugBar's
+     * Messages tab simply goes empty -- no error, no log line, no other symptom. "Why is
+     * my Messages tab blank" has no other tell anywhere in the system.
+     *
+     * Probed, not assumed: set_error_handler() returns the handler it displaces, so
+     * installing a throwaway closure and immediately popping it reports the live one and
+     * leaves the stack exactly as it was.
+     *
+     * Limitation worth stating: register_shutdown_function() has no getter, so a shutdown
+     * handler cannot be reported here -- and that is the part of Whoops which catches
+     * genuine fatals.
+     *
+     * @return array{id: string, value: string, status: string, detail: string}
+     */
+    private function errorHandlerRow(): array
+    {
+        $current = set_error_handler(static fn (): bool => false);
+        restore_error_handler();
+
+        $name     = $this->describeCallable($current);
+        $detected = match (true) {
+            '' === $name => 'php',
+            str_contains($name, 'XoopsErrorHandler'), str_contains($name, 'XoopsLogger') => 'core',
+            str_contains($name, 'Whoops') => 'whoops',
+            str_contains($name, 'Tracy') => 'tracy',
+            default => 'other',
+        };
+
+        $declared = function_exists('xoops_getErrorScreenOwner')
+            ? (string) \xoops_getErrorScreenOwner()
+            : '';
+
+        // 'whoops' declared while core still holds the ERROR handler is the designed
+        // outcome, not drift: xwhoops returns the error handler immediately after
+        // register() and keeps only the exception and shutdown handlers.
+        $agrees = '' === $declared
+            || $detected === $declared
+            || ('whoops' === $declared && 'core' === $detected);
+
+        return $this->row(
+            'error_handler',
+            'php' === $detected ? 'PHP default' : ('' !== $name ? $name : $detected),
+            $agrees ? 'ok' : 'warning',
+            '' === $declared
+                ? 'This XOOPS does not declare an error_screen owner in debug.php.'
+                : sprintf('Declared owner: %s. Detected: %s.', $declared, $detected)
+        );
+    }
+
+    /**
+     * Whether the database connection rejects bad values or silently mangles them.
+     *
+     * Outside strict mode MySQL turns a value that does not fit its column into a
+     * truncation plus a warning nobody reads. XOOPS's own session table is the sharpest
+     * example: sess_data is TEXT (65,535 bytes), and an oversized $_SESSION was therefore
+     * stored truncated, became undecodable, and was destroyed on the next request --
+     * presenting as a lost login or a CSRF failure with no visible link to the write that
+     * caused it. Strict mode turns that into an error at the point of failure.
+     *
+     * Reads $GLOBALS['xoopsDB'] directly. This class otherwise confines itself to the few
+     * config keys it is handed, but there is no way to ask a database about its own mode
+     * without asking the database.
+     *
+     * @return array{id: string, value: string, status: string, detail: string}
+     */
+    private function sqlModeRow(): array
+    {
+        $db = $GLOBALS['xoopsDB'] ?? null;
+        if (! is_object($db) || ! method_exists($db, 'query') || ! method_exists($db, 'isResultSet')) {
+            return $this->row('sql_mode', 'Unavailable', 'info', 'No database connection to query.');
+        }
+
+        try {
+            $result = $db->query('SELECT @@SESSION.sql_mode');
+            if (! $db->isResultSet($result)) {
+                return $this->row('sql_mode', 'Unavailable', 'info', 'The server returned no result.');
+            }
+            $row  = $db->fetchRow($result);
+            $mode = is_array($row) ? trim((string) ($row[0] ?? '')) : '';
+        } catch (\Throwable) {
+            return $this->row('sql_mode', 'Unavailable', 'info', 'The mode could not be read.');
+        }
+
+        if ('' === $mode) {
+            return $this->row(
+                'sql_mode',
+                'Not strict',
+                'warning',
+                'sql_mode is empty: oversized and out-of-range values are truncated silently, not rejected.'
+            );
+        }
+
+        $strict = str_contains($mode, 'STRICT_TRANS_TABLES') || str_contains($mode, 'STRICT_ALL_TABLES');
+
+        return $this->row(
+            'sql_mode',
+            $strict ? 'Strict' : 'Not strict',
+            $strict ? 'ok' : 'warning',
+            $strict
+                ? $mode
+                : 'Oversized values are truncated silently rather than rejected. ' . $mode
+        );
+    }
+
+    /** Render a callable as a readable name without invoking it. */
+    private function describeCallable(mixed $handler): string
+    {
+        if (is_string($handler)) {
+            return $handler;
+        }
+
+        if (is_array($handler) && 2 === count($handler)) {
+            $target = $handler[0];
+
+            return (is_object($target) ? $target::class : (string) $target) . '::' . (string) $handler[1];
+        }
+
+        return $handler instanceof \Closure ? 'Closure' : '';
     }
 
     /** @return array{id: string, value: string, status: string, detail: string} */

@@ -312,11 +312,59 @@ div.phpdebugbar-header:before, div.phpdebugbar-header:after {
 div.phpdebugbar-header:after {
   clear: both;
 }
+/* Wrap the toolbar instead of collapsing it to icons.
+ *
+ * Upstream lays the header out with floats and, when the tabs no longer fit on
+ * one line, throws every label away and leaves twenty identical icons. That
+ * trades the information you need (which tab is which) for the space it costs,
+ * which is the wrong trade on a 20+ collector bar. Flex with wrapping keeps the
+ * names and spends a second row instead -- the bar is 32px tall and sits at the
+ * bottom of the viewport, so a row is the cheaper currency.
+ *
+ * The floats below are neutralised rather than deleted so the rules stay next to
+ * what they override and the upstream file can still be diffed against this one. */
+div.phpdebugbar-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+}
+div.phpdebugbar-header:before,
+div.phpdebugbar-header:after {
+  display: none;
+}
+div.phpdebugbar-header-left,
+div.phpdebugbar-header-right {
+  float: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
 div.phpdebugbar-header-left {
-  float: left;
+  flex: 1 1 auto;
 }
 div.phpdebugbar-header-right {
-  float: right;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+div.phpdebugbar-header-left > *,
+div.phpdebugbar-header-right > * {
+  float: none;
+}
+
+/* Below this width the right-hand cluster (memory, time, PHP version, dataset
+ * URL, settings, close) takes a row of its own rather than squeezing the tabs.
+ * 1400px is chosen so the break happens while the tab strip still fits on one
+ * line; the tabs then wrap on their own as the window narrows further. */
+@media (max-width: 1400px) {
+  div.phpdebugbar-header-left,
+  div.phpdebugbar-header-right {
+    flex: 1 1 100%;
+  }
+  div.phpdebugbar-header-right {
+    justify-content: flex-end;
+    margin-left: 0;
+    border-top: 1px solid var(--debugbar-header-border);
+  }
 }
 div.phpdebugbar-header > div > * {
   padding: 5px;
@@ -359,6 +407,24 @@ a.phpdebugbar-indicator
 a.phpdebugbar-tab.phpdebugbar-active {
   background: var(--debugbar-active);
   color: var(--debugbar-active-text);
+}
+
+/* Hover affordance on tabs.
+ *
+ * Upstream styles only the ACTIVE tab, so the bar tells you where you ARE but never
+ * where you are ABOUT to go. With twenty-plus tabs at 13px the pointer lands between
+ * two of them constantly and the only way to find out which one you hit is to click
+ * it and lose the panel you were reading. Deliberately a step below the active
+ * background so "hovered" and "open" stay distinguishable when they are adjacent. */
+div.phpdebugbar a.phpdebugbar-tab:not(.phpdebugbar-active):hover {
+  background: var(--debugbar-background-alt);
+  color: var(--debugbar-text);
+}
+
+/* The same affordance for the right-hand indicator cluster and the icon-only
+ * history/settings tabs, which are equally unlabelled targets. */
+div.phpdebugbar .phpdebugbar-indicator:hover {
+  background: var(--debugbar-background-alt);
 }
   a.phpdebugbar-tab .phpdebugbar-text {
     font-size: 14px;
@@ -758,8 +824,13 @@ div.phpdebugbar-mini-design a.phpdebugbar-tab {
 /* The :hover selector is included so moving the pointer over the active tab  */
 /* does not turn its inline label back into a floating tooltip.               */
 
-div.phpdebugbar-mini-design a.phpdebugbar-tab.phpdebugbar-active span.phpdebugbar-text,
-div.phpdebugbar-mini-design a.phpdebugbar-tab.phpdebugbar-active:hover span.phpdebugbar-text {
+/* Superseded in scope by the wrapping header above: upstream still ADDS
+ * .phpdebugbar-mini-design once its one-line width test fails, so the class has
+ * to be neutralised rather than avoided. Widened from the active tab to EVERY
+ * tab -- with the header now wrapping there is room for all the labels, and
+ * showing only the open one was a compromise made when there was not. */
+div.phpdebugbar-mini-design a.phpdebugbar-tab span.phpdebugbar-text,
+div.phpdebugbar-mini-design a.phpdebugbar-tab:hover span.phpdebugbar-text {
   display: inline-block;
   position: static;
   top: auto;

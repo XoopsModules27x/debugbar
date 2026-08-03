@@ -52,7 +52,21 @@ final class AccessPolicy
     public static function isAllowed(): bool
     {
         try {
-            $isModuleAdmin = (bool) ($GLOBALS['xoopsUserIsAdmin'] ?? false);
+            // $GLOBALS['xoopsUserIsAdmin'] is not a stable question to ask. common.php
+            // sets it during auth, then REASSIGNS it to isAdmin($xoopsModule mid) once a
+            // module is resolved -- so on these pages it means "admin of debugbar", and
+            // on some other page it means something else. It has been the right answer
+            // here only by coincidence of where the file happens to live.
+            //
+            // xoops_isDeveloperRequest() states the intent instead: an authenticated
+            // member of the webmaster group, with debugging on, holding admin rights on
+            // this module. NOTE this is a deliberate tightening -- a delegated module
+            // admin who is NOT in the webmaster group loses access. That is the right
+            // default for a page exposing site-wide SQL, sessions and configuration.
+            // Drop the '?:' branch to a plain $GLOBALS read to revert.
+            $isModuleAdmin = function_exists('xoops_isDeveloperRequest')
+                ? \xoops_isDeveloperRequest('debugbar')
+                : (bool) ($GLOBALS['xoopsUserIsAdmin'] ?? false);
             $debugMode = (int) ($GLOBALS['xoopsConfig']['debug_mode'] ?? 0);
             $moduleEnabled = (bool) (Helper::getInstance()->getConfig('debugbar_enable') ?? true);
 

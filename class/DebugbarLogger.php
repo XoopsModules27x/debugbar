@@ -113,6 +113,17 @@ class DebugbarLogger
     /** @var int Slow memory threshold in bytes, zero disables it. */
     private int $memoryThreshold = 0;
 
+    /**
+     * @var int Maximum backtrace frames rendered per message in the bar.
+     *
+     * Bounds only what the toolbar DRAWS. The full trace still reaches the file
+     * loggers, which is the point: a deep recursion used to render hundreds of
+     * frames into a single Messages row and push everything else off the screen,
+     * while the one thing you needed -- the entry near the top -- was unaffected
+     * by truncating the tail.
+     */
+    private int $traceDepth = 25;
+
     /** @var array<string, array{reads:int,writes:int,deletes:int,hits:int,misses:int}> */
     private array $cacheStats = [];
 
@@ -521,6 +532,13 @@ class DebugbarLogger
     public function setMemoryThreshold(int $bytes): void
     {
         $this->memoryThreshold = max(0, $bytes);
+    }
+
+    public function setTraceDepth(int $frames): void
+    {
+        // Floor of 1 rather than 0: a depth of zero would render a bare overflow
+        // marker with no frame at all, which is strictly worse than one frame.
+        $this->traceDepth = max(1, $frames);
     }
 
     /** @return array<int,array<string,mixed>> */
@@ -1464,6 +1482,14 @@ class DebugbarLogger
     /** @param array<int, mixed> $trace */
     private function formatTrace(array $trace): string
     {
+        // Truncate before formatting, not after: formatTraceArgument() walks and
+        // stringifies every argument of every frame, so slicing first is what
+        // actually saves the work on a deep trace.
+        $overflow = count($trace) - $this->traceDepth;
+        if ($overflow > 0) {
+            $trace = array_slice($trace, 0, $this->traceDepth, true);
+        }
+
         $lines = [];
         foreach ($trace as $index => $frame) {
             if (! is_array($frame)) {
@@ -1488,6 +1514,12 @@ class DebugbarLogger
                 $call = ' ' . $callName . '(' . implode(', ', $arguments) . ')';
             }
             $lines[] = '#' . $index . ' ' . $location . $call;
+        }
+
+        // Say what was dropped. A silently shortened trace reads as a shallow
+        // call stack, which is a different bug from the one being investigated.
+        if ($overflow > 0) {
+            $lines[] = '… (+' . $overflow . ' more frames)';
         }
 
         return implode("\n", $lines);

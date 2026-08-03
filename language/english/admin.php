@@ -235,3 +235,9 @@ declare(strict_types=1);
 \define('_AM_DEBUGBAR_RAY_DISABLED_MSG', 'Ray is now disabled.');
 \define('_AM_DEBUGBAR_RAY_FAILED', 'The Ray preference could not be updated.');
 \define('_AM_DEBUGBAR_RAY_BAD_TOKEN', 'The security token expired. Ray was not changed.');
+
+// Diagnostics: database strictness
+\define('_AM_DEBUGBAR_DIAG_SQL_MODE', 'MySQL sql_mode');
+
+// Diagnostics: PHP error/exception handler ownership
+\define('_AM_DEBUGBAR_DIAG_ERROR_HANDLER', 'PHP error handler');

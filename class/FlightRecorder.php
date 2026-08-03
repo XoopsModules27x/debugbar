@@ -25,6 +25,14 @@ final class FlightRecorder
             if (! is_dir($dir) && ! mkdir($dir, 0755, true) && ! is_dir($dir)) {
                 return false;
             }
+            // Directory-listing guard. The records carry request URIs, SQL and
+            // timings, and this directory is only protected by .htaccess -- which
+            // does nothing on nginx, IIS, or Apache with AllowOverride None. An
+            // index.html is the one defence that works on all of them. Errors are
+            // suppressed: failing to write it must not lose the record itself.
+            if (! is_file($dir . '/index.html')) {
+                @file_put_contents($dir . '/index.html', '<script>history.go(-1);</script>');
+            }
             $file = sprintf('%s/%010d-%s-%s.json', $dir, time(), $violation ? 'v' : 'r', $requestId);
             $json = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_PARTIAL_OUTPUT_ON_ERROR);
             if ($json === false || file_put_contents($file, $json, LOCK_EX) === false) {
