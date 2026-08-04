@@ -17,13 +17,24 @@ build:
       tests:
         override:
           - php-scrutinizer-run --enable-security-analysis
-#    php-8.4:
-#      environment:
-#        php:
-#          version: '8.4'
-#      tests:
-#        override:
-#          - composer test
+    # Second node, so the regression suite actually runs here: the analysis node
+    # above sets `project_setup: override: true`, which suppresses the inferred
+    # composer install, leaving it no vendor/ to run PHPUnit from. This node keeps
+    # the default setup and therefore does have one.
+    #
+    # Pinned to 8.2, NOT the 8.4 this node asked for when it was disabled — that
+    # version is what failed, during environment setup rather than in the tests.
+    # 8.2 is the module's documented floor and is the version the analysis node
+    # already builds on, so it is known-good on this platform. Newer runtimes are
+    # not lost: CI covers 8.2 through 8.5 on every push, and this node exists to
+    # run the suite at all, not to be the place new PHP versions are proven.
+    tests:
+      environment:
+        php:
+          version: '8.2'
+      tests:
+        override:
+          - composer test
 filter:
   dependency_paths:
     - XoopsCore27/*
