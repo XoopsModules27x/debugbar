@@ -38,6 +38,12 @@ $modversion['sqlfile']      = ['mysql' => 'sql/mysql.sql'];
 
 // --- Min Requirements ---
 $modversion['min_php']   = '8.2.0';
+// 2.7.0, not 2.7.3, deliberately. Everything this module needs from the 2.7.3 debug API
+// -- xoops_isDeveloperRequest(), xoops_getDebugConfig(), XOOPS_TRACY_STATUS -- is reached
+// through function_exists()/defined() guards with working fallbacks, so on 2.7.0-2.7.2 the
+// module runs with the database-backed Debug Mode and simply does not offer the Tracy
+// control. Raising the floor to 2.7.3 would make those fallbacks unreachable while leaving
+// them in the source, which is how you end up unable to tell which branch is load-bearing.
 $modversion['min_xoops'] = '2.7.0';
 
 // --- Admin ---

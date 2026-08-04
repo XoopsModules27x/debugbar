@@ -56,6 +56,7 @@ $labels = [
     'xoops_version' => _AM_DEBUGBAR_DIAG_XOOPS_VERSION,
     'php_version' => _AM_DEBUGBAR_PHP_VERSION,
     'xoops_debug' => _AM_DEBUGBAR_XOOPS_DEBUG,
+    'debug_file' => _AM_DEBUGBAR_DIAG_DEBUG_FILE,
     'environment' => _AM_DEBUGBAR_DIAG_ENVIRONMENT,
     'timezone' => _AM_DEBUGBAR_DIAG_TIMEZONE,
     'error_handler' => _AM_DEBUGBAR_DIAG_ERROR_HANDLER,

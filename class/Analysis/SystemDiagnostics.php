@@ -45,6 +45,7 @@ final class SystemDiagnostics
                 ),
                 $this->row('environment', defined('XOOPS_ENV') ? (string) XOOPS_ENV : 'Not defined', 'info'),
                 $this->row('timezone', date_default_timezone_get(), 'info'),
+                $this->debugFileRow(),
                 $this->errorHandlerRow(),
                 $this->sqlModeRow(),
             ],
@@ -267,6 +268,48 @@ final class SystemDiagnostics
     }
 
     /** @return array{id: string, value: string, status: string, detail: string} */
+    /**
+     * What xoops_data/data/debug.php is doing this request -- including failing.
+     *
+     * This is the ONLY place a broken debug.php is reported. xoops_getDebugConfig()
+     * deliberately swallows the failure during bootstrap, because at that point nothing
+     * has configured error display and a warning would be emitted under php.ini's rules
+     * -- a path printed to whoever loaded the page on a misconfigured host. The reason is
+     * carried to here instead, where the request is already known to belong to an
+     * authenticated administrator looking at a diagnostics page.
+     *
+     * @return array{id: string, value: string, status: string, detail: string}
+     */
+    private function debugFileRow(): array
+    {
+        if (! function_exists('xoops_getDebugConfig')) {
+            return $this->row('debug_file', 'Not supported', 'info', 'This XOOPS core predates the debug.php loader.');
+        }
+
+        if (function_exists('xoops_getDebugConfigError')) {
+            $error = (string) \xoops_getDebugConfigError();
+            if ('' !== $error) {
+                return $this->row('debug_file', 'Load failed', 'warning', $error);
+            }
+        }
+
+        $config = \xoops_getDebugConfig();
+        if ([] === $config) {
+            return $this->row('debug_file', 'Not present', 'ok', 'Production behaviour; no debug.php in xoops_data/data.');
+        }
+
+        $enablesDebugbar = true === ($config['debugbar']['enabled'] ?? false);
+
+        return $this->row(
+            'debug_file',
+            'Active',
+            'info',
+            $enablesDebugbar
+                ? 'debug.php is enabling DebugBar independently of the database Debug Mode.'
+                : 'debug.php is loaded but does not enable DebugBar.'
+        );
+    }
+
     private function tracyBootstrapRow(): array
     {
         if (! defined('XOOPS_TRACY_STATUS')) {

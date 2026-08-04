@@ -53,15 +53,55 @@ final class AccessPolicy
      * in what gets passed as $isModuleAdmin, so the three-way AND itself can
      * never drift between them.
      *
+     * Debugging may be switched on from either of TWO sources, and they are ORed:
+     * the database-backed Admin -> Preferences -> Debug Mode, or a 'debugbar' block in
+     * xoops_data/data/debug.php on a core that supports it. A developer working on a
+     * local checkout can then enable the bar without touching the database, while an
+     * existing site keeps using the preference it has always used. Neither source
+     * relaxes the admin requirement or the module's own switch -- those stay ANDed, and
+     * the admin requirement is structural here on purpose: it is not configurable, and
+     * must not become configurable.
+     *
+     * $fileEnabled defaults to false so every existing caller and test keeps its meaning.
+     *
      * @param bool $isModuleAdmin caller has module admin rights
      * @param int  $debugMode     XOOPS debug_mode config value
      * @param bool $moduleEnabled module's debugbar_enable config value
+     * @param bool $fileEnabled   debug.php declares debugbar.enabled = true
      *
      * @return bool
      */
-    public static function evaluate(bool $isModuleAdmin, int $debugMode, bool $moduleEnabled): bool
+    public static function evaluate(
+        bool $isModuleAdmin,
+        int $debugMode,
+        bool $moduleEnabled,
+        bool $fileEnabled = false
+    ): bool {
+        return $isModuleAdmin && (0 !== $debugMode || $fileEnabled) && $moduleEnabled;
+    }
+
+    /**
+     * Does xoops_data/data/debug.php switch DebugBar on?
+     *
+     * One reader, used by both wrappers, for the same reason evaluate() is shared: the
+     * two gates must never disagree about what "debugging is on" means, or the toolbar
+     * renders buttons whose endpoints refuse them.
+     *
+     * Reads a strict true. The core normalises this key to a real boolean, but the guard
+     * is repeated here because this module also has to run on 2.7.0-2.7.2, where
+     * xoops_getDebugConfig() does not exist at all and nothing has normalised anything.
+     *
+     * @return bool
+     */
+    public static function fileEnablesDebugbar(): bool
     {
-        return $isModuleAdmin && (0 !== $debugMode) && $moduleEnabled;
+        if (! \function_exists('xoops_getDebugConfig')) {
+            return false;
+        }
+
+        $config = \xoops_getDebugConfig();
+
+        return \is_array($config) && true === ($config['debugbar']['enabled'] ?? false);
     }
 
     /**
@@ -90,7 +130,7 @@ final class AccessPolicy
             $debugMode = (int) ($GLOBALS['xoopsConfig']['debug_mode'] ?? 0);
             $moduleEnabled = (bool) (Helper::getInstance()->getConfig('debugbar_enable') ?? true);
 
-            return self::evaluate($isModuleAdmin, $debugMode, $moduleEnabled);
+            return self::evaluate($isModuleAdmin, $debugMode, $moduleEnabled, self::fileEnablesDebugbar());
         } catch (\Throwable $e) {
             return false;
         }
@@ -125,7 +165,7 @@ final class AccessPolicy
             $debugMode = (int) ($GLOBALS['xoopsConfig']['debug_mode'] ?? 0);
             $moduleEnabled = (bool) (Helper::getInstance()->getConfig('debugbar_enable') ?? true);
 
-            return self::evaluate($isModuleAdmin, $debugMode, $moduleEnabled);
+            return self::evaluate($isModuleAdmin, $debugMode, $moduleEnabled, self::fileEnablesDebugbar());
         } catch (\Throwable $e) {
             return false;
         }
