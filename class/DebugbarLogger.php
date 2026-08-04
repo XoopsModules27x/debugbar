@@ -33,6 +33,7 @@ use DebugBar\StandardDebugBar;
 use Psr\Log\LogLevel;
 use Xmf\Request;
 use XoopsModules\Debugbar\Analysis\DiagnosticSanitizer;
+use XoopsModules\Debugbar\Analysis\SqlRedactor;
 
 /**
  * DebugbarLogger — collects XOOPS debug data and renders via PHP DebugBar.
@@ -112,8 +113,22 @@ class DebugbarLogger
     /** @var int Slow memory threshold in bytes, zero disables it. */
     private int $memoryThreshold = 0;
 
+    /**
+     * @var int Maximum backtrace frames rendered per message in the bar.
+     *
+     * Bounds only what the toolbar DRAWS. The full trace still reaches the file
+     * loggers, which is the point: a deep recursion used to render hundreds of
+     * frames into a single Messages row and push everything else off the screen,
+     * while the one thing you needed -- the entry near the top -- was unaffected
+     * by truncating the tail.
+     */
+    private int $traceDepth = 25;
+
     /** @var array<string, array{reads:int,writes:int,deletes:int,hits:int,misses:int}> */
     private array $cacheStats = [];
+
+    /** @var array{cached: int, uncached: int} Block renders split by cache hit, stored per request. */
+    private array $blockCounts = ['cached' => 0, 'uncached' => 0];
 
     /** @var array<string, float> */
     private array $lifecycleStarts = [];
@@ -123,9 +138,6 @@ class DebugbarLogger
 
     /** @var string CSRF token for on-demand query EXPLAIN requests. */
     private string $explainToken = '';
-
-    /** Show the opt-in one-shot Xdebug profiler control in the toolbar. */
-    private bool $profileButtonEnabled = false;
 
     /** @var array<string, array<string, mixed>> */
     private array $tags = [];
@@ -213,6 +225,8 @@ class DebugbarLogger
                 $this->debugbar->addCollector(new MessagesCollector('Cache'));
                 $this->debugbar->addCollector(new MessagesCollector('HTTP'));
                 $this->debugbar->addCollector(new MessagesCollector('Mail'));
+                $this->debugbar->addCollector(new MessagesCollector('Events'));
+                $this->debugbar->addCollector(new MessagesCollector('Templates'));
 
                 // Render structured message context client-side. This avoids
                 // embedding HTML dumps while preserving safe, expandable values.
@@ -226,14 +240,46 @@ class DebugbarLogger
                     }
                 }
 
-                // Preserve source context for diagnostic messages.
-                foreach (['messages', 'Deprecated'] as $collectorName) {
+                // Clickable source locations. This block previously said it
+                // preserved source context while calling collectFileTrace(false)
+                // — which is the library's own default, so it did nothing at all.
+                // The toolbar has rendered editor links for four kinds of row
+                // since it was written; it simply never received a file to link,
+                // because nothing turned the trace on and no editor template was
+                // ever set. Both halves are now connected.
+                //
+                // Excluding the logger and this module from the backtrace matters:
+                // without it every link points at the debugbar's own dispatch
+                // rather than the code that logged the message.
+                foreach (['messages', 'Deprecated', 'Blocks', 'Extra', 'Queries', 'Cache', 'HTTP', 'Mail', 'Events', 'Templates'] as $collectorName) {
                     if ($this->debugbar->hasCollector($collectorName)) {
                         $collector = $this->debugbar->getCollector($collectorName);
                         if ($collector instanceof MessagesCollector) {
-                            $collector->collectFileTrace(false);
+                            $collector->collectFileTrace(true);
+                            $collector->addBacktraceExcludePaths(['/class/logger/', '/modules/debugbar/']);
                         }
                     }
+                }
+                // php.ini's xdebug.file_link_format wins when set — a developer
+                // who configured that already told the whole stack which editor
+                // they use, and overriding it here would be presumptuous.
+                if ('' === (string) ini_get('xdebug.file_link_format')) {
+                    // Matches xoops_version.php's declared default for
+                    // editor_link. The two must agree: this fallback only runs
+                    // when the preference is absent or empty, so a disagreement
+                    // would silently give a fresh install one editor and a
+                    // half-configured one another.
+                    $editor = 'phpstorm';
+
+                    try {
+                        $configured = (string) (Helper::getInstance()->getConfig('editor_link') ?? '');
+                        if ('' !== $configured) {
+                            $editor = $configured;
+                        }
+                    } catch (\Throwable) {
+                        // Config unavailable this early; the default stands.
+                    }
+                    $this->debugbar->setEditor($editor);
                 }
 
                 // v1.x: disable jQuery (already loaded by XOOPS) and noConflict wrapping
@@ -329,6 +375,11 @@ class DebugbarLogger
         // Add XOOPS custom settings widget (provides settings gear icon, themes, position)
         $xoopsAssetsUrl = $this->moduleUrl() . '/assets';
         $theme->addStylesheet($xoopsAssetsUrl . '/xoops-debugbar-settings.css');
+        // The settings widget is the only toolbar script that needs jQuery. Rather
+        // than bundle a private copy, link the canonical XOOPS jQuery — and only
+        // load it when the theme has not already, so it is never double-loaded.
+        $jqueryUrl = XOOPS_URL . '/browse.php?Frameworks/jquery/jquery.js';
+        $theme->addScript('', [], 'window.jQuery||document.write(\'<script src="' . $jqueryUrl . '"><\/script>\');', 'debugbar-jquery');
         $theme->addScript($xoopsAssetsUrl . '/xoops-debugbar-settings.js');
 
         $this->assetsAdded = true;
@@ -488,10 +539,11 @@ class DebugbarLogger
         $this->memoryThreshold = max(0, $bytes);
     }
 
-    /** Enable the administrator-only toolbar control configured by the module preference. */
-    public function setProfileButtonEnabled(bool $enabled): void
+    public function setTraceDepth(int $frames): void
     {
-        $this->profileButtonEnabled = $enabled;
+        // Floor of 1 rather than 0: a depth of zero would render a bare overflow
+        // marker with no frame at all, which is strictly worse than one frame.
+        $this->traceDepth = max(1, $frames);
     }
 
     /** @return array<int,array<string,mixed>> */
@@ -516,10 +568,15 @@ class DebugbarLogger
         return isset($this->lifecycleMeasures[$name]) ? $this->lifecycleMeasures[$name] * 1000.0 : 0.0;
     }
 
-    /** Create the EXPLAIN token while the authenticated request session is open. */
+    /**
+     * Create the EXPLAIN CSRF token while the authenticated request session
+     * is open. Reusable (not single-use): one page load may EXPLAIN several
+     * rows. Validation happens in explain.php via the same standard XOOPS
+     * security-token store — no bespoke signing secret is involved.
+     */
     public function prepareExplainToken(): void
     {
-        if (! $this->activated || ! isset($GLOBALS['xoopsSecurity']) || ! is_object($GLOBALS['xoopsSecurity'])) {
+        if (! $this->activated || ! isset($GLOBALS['xoopsSecurity']) || ! $GLOBALS['xoopsSecurity'] instanceof \XoopsSecurity) {
             return;
         }
 
@@ -530,50 +587,90 @@ class DebugbarLogger
             if (session_status() !== PHP_SESSION_ACTIVE) {
                 session_start();
             }
-            // Use a stateless signed token for this read-only admin action.
-            // XOOPS session tokens can be lost when another bootstrap phase
-            // closes or regenerates the session before footer rendering.
-            $this->explainToken = $this->buildExplainToken();
+            $this->explainToken = $GLOBALS['xoopsSecurity']->createToken(0, 'DEBUGBAR_EXPLAIN');
         } catch (\Throwable $e) {
             $this->explainToken = '';
         }
     }
 
-    public function isValidExplainToken(string $token): bool
+    /**
+     * Persist this request's recorded SQL (hash => statement) so the
+     * on-demand EXPLAIN endpoint can only ever explain queries the server
+     * itself ran. Opt-in (explain_on_demand), bounded, aggressively pruned.
+     *
+     * @return void
+     */
+    private function stashQueriesForExplain(): void
     {
-        if ($token === '') {
-            return false;
-        }
-        $hour = (int) floor(time() / 3600);
-        foreach ([$hour, $hour - 1] as $slot) {
-            $signature = $this->explainSignature($slot);
-            if ($signature !== '' && hash_equals($signature, $token)) {
-                return true;
+        try {
+            if (! class_exists(Helper::class) || ! (bool) (Helper::getInstance()->getConfig('explain_on_demand') ?? false)) {
+                return;
             }
+            if ([] === $this->queryLog) {
+                return;
+            }
+            $requestId = \XoopsModules\Debugbar\Profiler::getInstance()->getRequestId();
+            if (1 !== preg_match('/^[0-9a-f]{8,32}$/i', $requestId)) {
+                return;
+            }
+            $varPath = defined('XOOPS_VAR_PATH') && XOOPS_VAR_PATH !== '' ? XOOPS_VAR_PATH : XOOPS_ROOT_PATH . '/xoops_data';
+            $dir = $varPath . '/caches/debugbar_explain';
+            if (! is_dir($dir) && ! mkdir($dir, 0755, true) && ! is_dir($dir)) {
+                return;
+            }
+            // Opportunistic prune: drop files older than 15 minutes; hard-cap 50 files.
+            $files = glob($dir . '/*.json');
+            $files = is_array($files) ? $files : [];
+            $now = time();
+            // Suppressed: a concurrent request can unlink a file between the
+            // glob() and the stat, and this logger captures PHP warnings — an
+            // unsuppressed filemtime() would report its own housekeeping race
+            // into the Messages panel it serves.
+            foreach ($files as $f) {
+                if ($now - (int) @filemtime($f) > 900) {
+                    @unlink($f);
+                }
+            }
+            $files = glob($dir . '/*.json');
+            $files = is_array($files) ? $files : [];
+            if (count($files) >= 50) {
+                // Stat once per file, not once per comparison: inside the
+                // comparator this ran O(n log n) times against the filesystem.
+                $times = [];
+                foreach ($files as $f) {
+                    $times[$f] = (int) @filemtime($f);
+                }
+                usort($files, static fn ($a, $b) => $times[$a] <=> $times[$b]);
+                foreach (array_slice($files, 0, count($files) - 49) as $f) {
+                    @unlink($f);
+                }
+            }
+            $map = [];
+            foreach (array_slice($this->queryLog, 0, 200) as $entry) {
+                $sql = (string) ($entry['sql'] ?? '');
+                if ('' === $sql || true === ($entry['sql_truncated'] ?? false)) {
+                    continue;   // truncated statements cannot be EXPLAINed
+                }
+                // Key on the hash of the ORIGINAL sql (matches the bar's sql_hash);
+                // store only a redacted, runnable form so no secret is persisted.
+                $map[hash('sha256', $sql)] = SqlRedactor::redact($sql);
+            }
+            if ([] === $map) {
+                return;
+            }
+            // json_encode() returns false on invalid UTF-8 in a recorded
+            // statement; file_put_contents() would coerce that to '' and leave a
+            // file that exists but decodes to null. The EXPLAIN button would
+            // then fail for every query in this request until the 15-minute
+            // prune, presenting as missing data rather than a write error.
+            $json = json_encode($map);
+            if (! is_string($json)) {
+                return;
+            }
+            @file_put_contents($dir . '/' . strtolower($requestId) . '.json', $json, LOCK_EX);
+        } catch (\Throwable $e) {
+            // stash is best-effort; never break rendering
         }
-
-        return false;
-    }
-
-    private function buildExplainToken(): string
-    {
-        return $this->explainSignature((int) floor(time() / 3600));
-    }
-
-    private function explainSignature(int $slot): string
-    {
-        $uid = 0;
-        $user = $GLOBALS['xoopsUser'] ?? null;
-        if ($user instanceof \XoopsUser) {
-            $uid = (int) $user->getVar('uid');
-        }
-        $identity = $uid . '|' . session_id() . '|' . Request::getString('HTTP_USER_AGENT', '', 'SERVER');
-        $secret = (new ExplainSecretStore())->load();
-        if ($secret === null) {
-            return '';
-        }
-
-        return hash_hmac('sha256', $identity . '|' . $slot, $secret);
     }
 
     /** Record an XOOPS cache operation for the Cache collector. */
@@ -588,6 +685,65 @@ class DebugbarLogger
             $this->cacheStats[$backend][$hit ? 'hits' : 'misses']++;
         }
         $this->recordMessage('Cache', sprintf('%s %s%s', strtoupper($operation), $key, $duration > 0 ? sprintf(' (%.2fms)', $duration * 1000) : ''), $hit === false ? LogLevel::WARNING : LogLevel::DEBUG);
+    }
+
+    /**
+     * Record the preload events dispatched during this request.
+     *
+     * @param list<array{name: string, listeners: int, ms: float}> $events  observed dispatches, in order
+     * @param int                                                  $dropped dispatches past the spy's cap
+     */
+    public function recordEvents(array $events, int $dropped = 0): void
+    {
+        foreach ($events as $event) {
+            // An event nobody listens to is the interesting case as often as
+            // not — "my hook never ran" looks identical to "the event never
+            // fired" from outside — so it is reported, not filtered out.
+            $this->recordMessage(
+                'Events',
+                sprintf(
+                    '%s — %s%s',
+                    $event['name'],
+                    0 === $event['listeners'] ? 'no listeners' : sprintf('%d listener%s', $event['listeners'], 1 === $event['listeners'] ? '' : 's'),
+                    $event['ms'] > 0.0 ? sprintf(' (%.2fms)', $event['ms']) : ''
+                ),
+                LogLevel::DEBUG,
+                $event
+            );
+        }
+        if ($dropped > 0) {
+            $this->recordMessage('Events', sprintf('%d further dispatches were not recorded (cap reached)', $dropped), LogLevel::WARNING);
+        }
+    }
+
+    /**
+     * Record the templates rendered during this request.
+     *
+     * @param list<array{name: string, source: string, path: string, renders: int, ms: float, bytes: int}> $templates rendered templates
+     * @param int                                                                                          $dropped   templates past the cap
+     */
+    public function recordTemplates(array $templates, int $dropped = 0): void
+    {
+        foreach ($templates as $template) {
+            // The source is the headline, not a detail: "is my override actually
+            // being used?" is the question this collector exists to answer, and
+            // it should be readable without expanding the row.
+            $this->recordMessage(
+                'Templates',
+                sprintf(
+                    '%s — %s%s%s',
+                    $template['name'],
+                    $template['source'],
+                    '' !== $template['path'] ? ' (' . $template['path'] . ')' : '',
+                    $template['renders'] > 1 ? sprintf(' ×%d', $template['renders']) : ''
+                ),
+                'not found' === $template['source'] ? LogLevel::WARNING : LogLevel::DEBUG,
+                $template
+            );
+        }
+        if ($dropped > 0) {
+            $this->recordMessage('Templates', sprintf('%d further templates were not recorded (cap reached)', $dropped), LogLevel::WARNING);
+        }
     }
 
     /** Record an outbound HTTP request from a module or HTTP adapter. */
@@ -606,6 +762,51 @@ class DebugbarLogger
         $mail = $this->redact($mail);
         $mailSucceeded = (bool) ($mail['success'] ?? false);
         $this->recordMessage('Mail', sprintf('%s → %s', $mail['subject'] ?? '(no subject)', $mail['to'] ?? ''), $mailSucceeded ? LogLevel::INFO : LogLevel::ERROR, $mail);
+    }
+
+    /**
+     * Compact "who issued this query" origin: the first one or two stack frames
+     * outside the database, logger and this module, as root-relative file:line.
+     *
+     * This is what turns an N+1 finding from "a problem exists somewhere" into
+     * a file and a line number. Without it the Queries panel tells an
+     * administrator that forty identical statements ran, but not which module
+     * to disable or which handler to fix.
+     *
+     * @return string e.g. "/kernel/member.php:194 < /modules/foo/blocks/bar.php:52"
+     */
+    private function queryOrigin(): string
+    {
+        $rootPath = str_replace('\\', '/', XOOPS_ROOT_PATH);
+        $frames = [];
+        foreach (debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 18) as $frame) {
+            $file = isset($frame['file']) ? str_replace('\\', '/', $frame['file']) : '';
+            if ('' === $file) {
+                continue;
+            }
+            // The database drivers, the logger dispatch, this module and the
+            // generic persistence layer are never the interesting caller.
+            if (1 === preg_match('#/(class/database/|class/logger/|modules/debugbar/|kernel/object\.php)#', $file)) {
+                continue;
+            }
+            $short = str_starts_with($file, $rootPath) ? substr($file, strlen($rootPath)) : $file;
+            $frames[] = $short . ':' . ($frame['line'] ?? 0);
+            if (count($frames) >= 2) {
+                break;
+            }
+        }
+
+        return implode(' < ', $frames);
+    }
+
+    /**
+     * Block renders this request, split by whether they came from cache.
+     *
+     * @return array{cached: int, uncached: int}
+     */
+    public function getBlockCounts(): array
+    {
+        return $this->blockCounts;
     }
 
     /** Add a searchable tag to the current request profile. */
@@ -924,7 +1125,7 @@ class DebugbarLogger
         $this->addRuntimeCollectors();
 
         if (! $this->quietmode) {
-            $isAjax = Request::getHeader('X-Requested-With') === 'XMLHttpRequest';
+            $isAjax = RequestShape::wantsFragment();
             $output = '';
 
             if ($isAjax) {
@@ -935,7 +1136,32 @@ class DebugbarLogger
                 // Always render assets inline here for theme-independence.
                 // This works across ALL themes without requiring <{$xoops_module_header}>.
                 $renderer->setIncludeVendors(true);
+
+                $this->stashQueriesForExplain();
+
                 $output = $renderer->renderHead();
+
+                // Bootstrap config bridging server-side settings to the JS widgets
+                // (Copy-to-clipboard secret redaction). Best-effort progressive
+                // enhancement — never break the page if config lookup fails.
+                //
+                // Both preferences are read here, in one guarded block, because
+                // renderDebugBar() has no try/catch of its own: an unguarded
+                // getConfig() throwing during footer rendering would break the
+                // page the bar is only meant to observe. The defaults are the
+                // safe direction — redaction ON, on-demand EXPLAIN OFF, so a
+                // failed lookup emits no token and no request id.
+                $copyRedact = true;
+                $explainOnDemand = false;
+
+                try {
+                    $helper = Helper::getInstance();
+                    $copyRedact = (bool) ($helper->getConfig('copy_redact') ?? true);
+                    $explainOnDemand = (bool) ($helper->getConfig('explain_on_demand') ?? false);
+                } catch (\Throwable) {
+                    // Defaults stand.
+                }
+                $output .= '<script>window.XoopsDebugbarConfig=' . json_encode(['copyRedact' => $copyRedact], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) . ';</script>' . "\n";
 
                 // Load XOOPS custom settings CSS
                 $xoopsAssetsUrl = $this->moduleUrl() . '/assets';
@@ -945,19 +1171,40 @@ class DebugbarLogger
                 // Render debugbar initialization and data
                 $output .= $renderer->render();
 
+                // The settings widget needs jQuery. Link the canonical XOOPS copy,
+                // loading it only when the theme has not already provided it so it
+                // is never double-loaded. Emitted before the settings script.
+                $output .= '<script type="text/javascript">window.jQuery||document.write(\'<script src="'
+                    . XOOPS_URL . '/browse.php?Frameworks/jquery/jquery.js"><\/script>\');</script>' . "\n";
                 // Load the settings widget JS as an external script (cacheable by browser)
                 $output .= '<script type="text/javascript" src="'
                     . $this->escapeAttribute($xoopsAssetsUrl . '/xoops-debugbar-settings.js') . '"></script>' . "\n";
-                $explainToken = $this->explainToken;
+                // Syntax highlighter. The bundle has always shipped but was never
+                // loaded, so PhpDebugBar.Widgets.highlight() fell through to plain
+                // escaping and every SQL statement rendered unhighlighted. It
+                // defines globalThis.phpdebugbar_hljs under its own class prefix,
+                // so it cannot collide with a copy the page itself loads.
+                $output .= '<script type="text/javascript" defer src="'
+                    . $this->escapeAttribute($xoopsAssetsUrl . '/vendor/highlightjs/highlight.pack.js') . '"></script>' . "\n";
+                // The client never submits SQL: only the request id + a hash
+                // of a statement the server itself recorded (see
+                // stashQueriesForExplain()/explain.php). Off unless the
+                // explain_on_demand module preference is enabled — read in the
+                // guarded block above, not again here.
+                $explainToken = $explainOnDemand ? $this->explainToken : '';
+                $explainRequestId = $explainOnDemand ? \XoopsModules\Debugbar\Profiler::getInstance()->getRequestId() : '';
                 $output .= '<script type="text/javascript" src="'
                     . $this->escapeAttribute($xoopsAssetsUrl . '/frontend.js') . '" data-explain-url="'
                     . $this->escapeAttribute($this->moduleUrl() . '/explain.php') . '" data-explain-token="'
-                    . $this->escapeAttribute($explainToken) . '" data-profile-button="'
-                    . ($this->profileButtonEnabled ? '1' : '0') . '" data-profile-trigger="1" data-profile-label="'
-                    . $this->escapeAttribute(defined('_MD_DEBUGBAR_PROFILE_REQUEST') ? _MD_DEBUGBAR_PROFILE_REQUEST : 'Profile this request')
-                    . '" data-profile-loading-label="'
-                    . $this->escapeAttribute(defined('_MD_DEBUGBAR_PROFILE_REQUEST_LOADING') ? _MD_DEBUGBAR_PROFILE_REQUEST_LOADING : 'Profiling…')
-                    . '"></script>' . "\n";
+                    . $this->escapeAttribute($explainToken) . '" data-explain-request-id="'
+                    . $this->escapeAttribute($explainRequestId) . '"></script>' . "\n";
+                // Real User Monitoring: emit the web-vitals beacon loader
+                // (respects the rum_enable preference; empty for fragments).
+                $output .= \XoopsModules\Debugbar\Profiler::getInstance()->getRumHtml();
+                // Xdebug profile trigger: the button arms a one-shot capture
+                // through xdebug-arm.php rather than putting XDEBUG_TRIGGER in
+                // the URL (respects xdebug_button_enable; empty for fragments).
+                $output .= \XoopsModules\Debugbar\Profiler::getInstance()->getXdebugTriggerHtml();
             }
             $this->writeOutput($output);
         } else {
@@ -991,12 +1238,29 @@ class DebugbarLogger
             switch ($chan) {
                 case 'blocks':
                     $channel = 'Blocks';
-                    $msg = $message . ': ';
-                    if ((bool) ($context['cached'] ?? false)) {
-                        $msg .= sprintf(_MD_DEBUGBAR_CACHED, (int) ($context['cachetime'] ?? 0));
+                    // Two core contracts exist and the module has to serve both.
+                    // XOOPS 2.7.3 dispatches the RAW block name and leaves
+                    // formatting to the sub-logger. The XMF 2.0 line pre-formats
+                    // the message itself, in hardcoded English. Appending the
+                    // status unconditionally would double it on the second, and
+                    // taking the message as-is would lose translation on the
+                    // first — so decide from the data rather than sniffing a
+                    // version: when the message is still just the block name,
+                    // this core left the formatting to us.
+                    $blockName = (string) ($context['name'] ?? '');
+                    $preformatted = '' !== $blockName && $message !== $blockName;
+                    $cached = (bool) ($context['cached'] ?? false);
+                    if ($preformatted) {
+                        $msg = $message;
                     } else {
-                        $msg .= _MD_DEBUGBAR_NOT_CACHED;
+                        $msg = $message . ': ';
+                        $msg .= $cached
+                            ? sprintf(_MD_DEBUGBAR_CACHED, (int) ($context['cachetime'] ?? 0))
+                            : _MD_DEBUGBAR_NOT_CACHED;
                     }
+                    // Counted from the context flag either way, so the stored
+                    // cached/uncached split does not depend on the message shape.
+                    $this->blockCounts[$cached ? 'cached' : 'uncached']++;
 
                     break;
                 case 'deprecated':
@@ -1015,6 +1279,17 @@ class DebugbarLogger
                 case 'queries':
                     $channel = 'Queries';
                     $context['is_query'] = true;
+                    // Ship the stash key with the row. The toolbar used to derive it
+                    // with crypto.subtle.digest(), which exists only in a secure
+                    // context — on a plain-HTTP development host that is undefined,
+                    // the promise chain never ran, and the EXPLAIN button hung on
+                    // "Running…" forever. The server already computes this hash when
+                    // stashing, so sending it removes the browser crypto dependency
+                    // entirely and guarantees the two sides agree on the key.
+                    // Hash exactly what stashQueriesForExplain() keys on: the trimmed
+                    // statement capped at QUERY_SQL_CAP. Anything else and the lookup
+                    // misses.
+                    $context['sql_hash'] = hash('sha256', substr(trim($message), 0, self::QUERY_SQL_CAP));
                     $queryTime = is_numeric($context['query_time'] ?? null) ? (float) $context['query_time'] : 0.0;
                     $qt = $queryTime > 0 ? sprintf('%0.6f', $queryTime) : '';
                     $elapsed = microtime(true) - $this->requestStart;
@@ -1028,8 +1303,18 @@ class DebugbarLogger
                     if (count($this->queryLog) < self::QUERY_LOG_CAP) {
                         $this->queryLog[] = [
                             'sql' => substr($sqlKey, 0, self::QUERY_SQL_CAP),
+                            // Recorded, not inferred: a statement cut at the cap
+                            // is no longer valid SQL, so EXPLAINing it can only
+                            // produce a syntax error that the caller swallows
+                            // while still spending one of its EXPLAIN slots.
+                            'sql_truncated' => strlen($sqlKey) > self::QUERY_SQL_CAP,
                             'ms' => $queryTime * 1000.0,
                             'error' => $level === LogLevel::ERROR,
+                            // Captured inside the cap guard on purpose: a backtrace
+                            // per query is affordable in debug mode but not
+                            // unbounded, and a page past the cap is not one where
+                            // another origin string changes the diagnosis.
+                            'origin' => $this->queryOrigin(),
                         ];
                     }
                     if (! isset($this->queryMap[$sqlKey])) {
@@ -1242,6 +1527,14 @@ class DebugbarLogger
     /** @param array<int, mixed> $trace */
     private function formatTrace(array $trace): string
     {
+        // Truncate before formatting, not after: formatTraceArgument() walks and
+        // stringifies every argument of every frame, so slicing first is what
+        // actually saves the work on a deep trace.
+        $overflow = count($trace) - $this->traceDepth;
+        if ($overflow > 0) {
+            $trace = array_slice($trace, 0, $this->traceDepth, true);
+        }
+
         $lines = [];
         foreach ($trace as $index => $frame) {
             if (! is_array($frame)) {
@@ -1266,6 +1559,12 @@ class DebugbarLogger
                 $call = ' ' . $callName . '(' . implode(', ', $arguments) . ')';
             }
             $lines[] = '#' . $index . ' ' . $location . $call;
+        }
+
+        // Say what was dropped. A silently shortened trace reads as a shallow
+        // call stack, which is a different bug from the one being investigated.
+        if ($overflow > 0) {
+            $lines[] = '… (+' . $overflow . ' more frames)';
         }
 
         return implode("\n", $lines);

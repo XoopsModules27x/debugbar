@@ -7,6 +7,23 @@
 
     const csscls = PhpDebugBar.utils.makecsscls('phpdebugbar-widgets-');
 
+    const REDACT_KEYS = /pass(word)?|secret|token|auth|session|cookie|jwt|api[_-]?key/i;
+    // Mask secret-keyed values at any depth. For objects/arrays the redacted
+    // copy is returned so callers can stringify it without leaking nested
+    // secrets. A free-text `message` string cannot be key-matched and is out
+    // of scope (display in the bar is never redacted either).
+    const redactValue = PhpDebugBar.Widgets.redactValue = function (key, value) {
+        if (!(window.XoopsDebugbarConfig && window.XoopsDebugbarConfig.copyRedact)) { return value; }
+        if (REDACT_KEYS.test(String(key))) { return '***REDACTED***'; }
+        if (Array.isArray(value)) { return value.map((item) => redactValue('', item)); }
+        if (value && typeof value === 'object') {
+            const out = {};
+            for (const k of Object.keys(value)) { out[k] = redactValue(k, value[k]); }
+            return out;
+        }
+        return value;
+    };
+
     /**
      * Replaces spaces with &nbsp; and line breaks with <br>
      *
@@ -585,6 +602,17 @@
 
             const diagnosticText = function (value) {
                 const context = value.context || {};
+                // Real values live in context_json; the plain context map carries
+                // the same keys with null, for rendering only (see the renderer
+                // below, which resolves the same way). Reading context[key]
+                // directly copied "key: null" to the clipboard and gave
+                // redactValue() nothing to mask.
+                const contextJsonData = value.context_json || {};
+                const contextValue = (key) => (
+                    Object.prototype.hasOwnProperty.call(contextJsonData, key)
+                        ? contextJsonData[key]
+                        : context[key]
+                );
                 const lines = [String(value.message ?? '')];
                 if (context.source) {
                     lines.push('Source: ' + String(context.source));
@@ -594,9 +622,10 @@
                 }
                 if (Object.keys(context).length > 0) {
                     lines.push('Context:\n' + Object.keys(context).map((key) => {
-                        return key + ': ' + (typeof context[key] === 'object'
-                            ? JSON.stringify(context[key], null, 2)
-                            : String(context[key]));
+                        const redacted = redactValue(key, contextValue(key));
+                        return key + ': ' + (redacted && typeof redacted === 'object'
+                            ? JSON.stringify(redacted, null, 2)
+                            : String(redacted));
                     }).join('\n'));
                 }
                 return lines.join('\n');
@@ -616,10 +645,22 @@
                     li.append(val);
                 } else {
                     const m = value.message;
+                    // A query row's message is the statement itself, so it is worth
+                    // syntax highlighting in place rather than only once expanded.
+                    // The bundled highlighter escapes as it tokenises; when it is
+                    // absent highlight() falls back to escaping, so neither branch
+                    // puts raw SQL into innerHTML.
+                    const isQuery = !!(value.context_json && value.context_json.is_query);
 
                     val = document.createElement('span');
                     val.classList.add(csscls('value'));
-                    val.textContent = m;
+                    if (isQuery && typeof phpdebugbar_hljs !== 'undefined') {
+                        const inlineCode = document.createElement('code');
+                        inlineCode.innerHTML = PhpDebugBar.Widgets.highlight(m, 'sql');
+                        val.append(inlineCode);
+                    } else {
+                        val.textContent = m;
+                    }
                     val.classList.add(csscls('truncated'));
                     li.append(val);
 
@@ -638,7 +679,7 @@
                                 val.classList.remove(csscls('pretty'));
                                 val.classList.add(csscls('truncated'));
                             } else {
-                                prettyVal = prettyVal || createCodeBlock(value.message);
+                                prettyVal = prettyVal || createCodeBlock(value.message, isQuery ? 'sql' : undefined);
                                 val.classList.add(csscls('pretty'));
                                 val.classList.remove(csscls('truncated'));
                                 val.innerHTML = '';
@@ -680,6 +721,15 @@
                     contextTable.innerHTML = '<tr><th colspan="2">Context</th></tr>';
 
                     const contextJsonData = value.context_json || {};
+                    // Since the logger began sending real values in context_json, the
+                    // plain context map carries the keys with null values, for rendering
+                    // only. Every feature test below must resolve through context_json
+                    // first or it sees null and silently disables itself.
+                    const contextValue = (key) => (
+                        Object.prototype.hasOwnProperty.call(contextJsonData, key)
+                            ? contextJsonData[key]
+                            : value.context[key]
+                    );
                     for (const key of Object.keys(value.context)) {
                         if (typeof value.context[key] !== 'function') {
                             const tr = document.createElement('tr');
@@ -702,6 +752,13 @@
                     }
                     li.append(contextTable);
 
+                    // Row actions share one right-anchored flex group. They used to be
+                    // positioned individually with a hard-coded offset that assumed a
+                    // fixed "Copy details" width, so they overlapped as soon as a label
+                    // changed length ("Confirm EXPLAIN?", "Running…") or the font did.
+                    const rowActions = document.createElement('span');
+                    rowActions.classList.add(csscls('row-actions'));
+
                     if (Object.keys(value.context).length > 0) {
                         li.classList.add(csscls('has-details'));
                         const copy = document.createElement('button');
@@ -715,14 +772,16 @@
                                 window.setTimeout(() => { copy.textContent = 'Copy details'; }, 1200);
                             });
                         });
-                        val.append(copy);
+                        rowActions.append(copy);
                     }
 
-                    if (value.context.is_query && value.context.sql && window.phpdebugbar_explain) {
+                    if (contextValue('is_query') && contextValue('sql') && window.phpdebugbar_explain && window.phpdebugbar_explain.requestId) {
                         const explain = document.createElement('button');
                         explain.type = 'button';
                         explain.textContent = 'EXPLAIN';
                         explain.classList.add(csscls('explain-query'));
+                        let armed = false;
+                        let disarmTimer = null;
                         explain.addEventListener('click', (event) => {
                             event.stopPropagation();
                             const config = window.phpdebugbar_explain;
@@ -730,18 +789,59 @@
                                 explain.textContent = 'Unavailable';
                                 return;
                             }
+                            if (!armed) {
+                                armed = true;
+                                explain.textContent = 'Confirm EXPLAIN?';
+                                // Held so confirming can cancel it. Left to run, it fired
+                                // four seconds later and relabelled the button 'EXPLAIN',
+                                // overwriting the 'EXPLAIN loaded' result state and making
+                                // a successful run look like nothing had happened.
+                                disarmTimer = window.setTimeout(() => {
+                                    armed = false;
+                                    disarmTimer = null;
+                                    explain.textContent = 'EXPLAIN';
+                                }, 4000);
+                                return;
+                            }
+                            armed = false;
+                            if (disarmTimer) {
+                                window.clearTimeout(disarmTimer);
+                                disarmTimer = null;
+                            }
+                            if (explain.disabled) { return; }
                             explain.disabled = true;
                             explain.textContent = 'Running…';
                             contextTable.hidden = false;
-                            const body = new URLSearchParams({
-                                DEBUGBAR_EXPLAIN_REQUEST: config.token,
-                                sql: String(value.context.sql)
-                            });
-                            fetch(config.url, {
-                                method: 'POST',
-                                credentials: 'same-origin',
-                                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                                body
+                            // The client never submits SQL: only the request id + a hash of
+                            // a statement the server itself recorded (see
+                            // DebugbarLogger::stashQueriesForExplain()/explain.php).
+                            //
+                            // The hash comes from the server, which already computed it to
+                            // key the stash. Deriving it here instead needs crypto.subtle,
+                            // which exists only in a secure context: on a plain-HTTP
+                            // development host it is undefined, the call throws, and the
+                            // button hangs on "Running…" with no error. The digest path is
+                            // kept only as a fallback for a cached older payload.
+                            const suppliedHash = contextValue('sql_hash');
+                            const sql = String(contextValue('sql')).trim().slice(0, 4000);
+                            const hashPromise = (typeof suppliedHash === 'string' && /^[0-9a-f]{64}$/.test(suppliedHash))
+                                ? Promise.resolve(suppliedHash)
+                                : (window.crypto && window.crypto.subtle
+                                    ? window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(sql))
+                                        .then((buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join(''))
+                                    : Promise.reject(new Error('secure context required')));
+                            hashPromise.then((hash) => {
+                                const body = new URLSearchParams({
+                                    request_id: config.requestId,
+                                    sql_hash: hash,
+                                    token: config.token
+                                });
+                                return fetch(config.url, {
+                                    method: 'POST',
+                                    credentials: 'same-origin',
+                                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                                    body
+                                });
                             }).then(async (response) => {
                                 const raw = await response.text();
                                 let data;
@@ -757,8 +857,33 @@
                             }).then((data) => {
                                 const output = document.createElement('pre');
                                 output.classList.add(csscls('explain-result'));
-                                output.textContent = data.error || JSON.stringify(data.rows || [], null, 2);
-                                contextTable.append(output);
+                                // MySQL 8+ answers EXPLAIN with a single tree-format column
+                                // whose value is already multi-line text. Passing that through
+                                // JSON.stringify escaped every newline, so the plan arrived as
+                                // one unreadable line of \n. Print the tree as text and keep
+                                // JSON only for the classic one-row-per-table format.
+                                const rows = data.rows || [];
+                                const isTreePlan = rows.length > 0
+                                    && rows.every((row) => row && typeof row === 'object'
+                                        && Object.keys(row).length === 1
+                                        && typeof row[Object.keys(row)[0]] === 'string');
+                                if (data.error) {
+                                    output.textContent = data.error;
+                                } else if (isTreePlan) {
+                                    output.textContent = rows.map((row) => row[Object.keys(row)[0]]).join('\n');
+                                } else {
+                                    output.textContent = JSON.stringify(rows, null, 2);
+                                }
+                                // Wrapped in a real row: a <pre> appended straight to a
+                                // <table> is invalid, and the browser hoisted it out to
+                                // the first column, squeezing the plan into a narrow
+                                // strip that wrapped every line.
+                                const outputRow = document.createElement('tr');
+                                const outputCell = document.createElement('td');
+                                outputCell.colSpan = 2;
+                                outputCell.append(output);
+                                outputRow.append(outputCell);
+                                contextTable.append(outputRow);
                                 explain.textContent = data.error ? 'EXPLAIN failed' : 'EXPLAIN loaded';
                             }).catch(() => {
                                 explain.textContent = 'EXPLAIN failed';
@@ -766,16 +891,20 @@
                                 explain.disabled = false;
                             });
                         });
-                        val.append(explain);
+                        rowActions.append(explain);
                     }
 
-                    if (value.context.source_file) {
-                        const sourcePath = String(value.context.source_file);
+                    if (rowActions.childElementCount > 0) {
+                        val.append(rowActions);
+                    }
+
+                    if (contextValue('source_file')) {
+                        const sourcePath = String(contextValue('source_file'));
                         const sourceName = sourcePath.replace(/^.*[\\/]/, '');
                         li.prepend(editorLink({
                             filename: sourceName,
                             path: sourcePath,
-                            line: value.context.source_line || null
+                            line: contextValue('source_line') || null
                         }));
                     }
 

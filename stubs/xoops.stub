@@ -28,6 +28,8 @@ namespace {
 
     function xoops_loadLanguage(string $name, string $module = ''): bool {}
 
+    function xoops_setcookie(string $name, ?string $value = '', int $expire = 0, ?string $path = '/', ?string $domain = '', ?bool $secure = null, bool $httponly = true, string $samesite = 'Lax'): bool {}
+
     class XoopsObject
     {
         /** @var array<string,mixed> */
@@ -222,11 +224,43 @@ namespace {
         public function __construct() {}
     }
 
+    /**
+     * Mirrors class/preload.php as it really is: $_events is public and
+     * untyped, which is what lets PreloadEventSpy stand in for it. Do not
+     * "improve" these declarations — a typed property here would make the
+     * substitution look illegal to analysis while it stays legal at runtime.
+     */
+    class XoopsPreload
+    {
+        /** @var array<string, list<array{class_name: string, method: string}>> */
+        public $_preloads = [];
+
+        /**
+         * Deliberately left untyped, exactly as core declares it. Narrowing it
+         * to an array here would make PreloadEventSpy's substitution look
+         * illegal to analysis while remaining perfectly legal at runtime, and
+         * the whole Events collector depends on that being allowed.
+         */
+        public $_events = [];
+
+        public static function getInstance(): self {}
+
+        /** @param array<mixed> $args */
+        public function triggerEvent(string $event_name, $args = []) {}
+    }
+
     class XoopsSecurity
     {
-        public function check(bool $clearIfValid = true, bool $token = false, string $name = 'XOOPS_TOKEN'): bool {}
+        /**
+         * Core declares $token untyped with a `false` default, and every caller
+         * in this module passes a token string. Typing it `bool` here made the
+         * stub disagree with real usage.
+         */
+        public function check(bool $clearIfValid = true, string|bool $token = false, string $name = 'XOOPS_TOKEN'): bool {}
 
         public function getTokenHTML(string $name = 'XOOPS_TOKEN'): string {}
+
+        public function createToken(int $timeout = 0, string $name = 'XOOPS_TOKEN'): string {}
     }
 
     class XoopsLogger
@@ -262,7 +296,8 @@ namespace {
 
         public function addStylesheet(string $url): void {}
 
-        public function addScript(string $url): void {}
+        /** @param array<string, string> $attributes */
+        public function addScript(string $src = '', array $attributes = [], string $content = '', string $name = ''): void {}
     }
 
     class XoopsMonologLogger
@@ -274,6 +309,59 @@ namespace {
     }
 
     function ray(mixed ...$arguments): \Spatie\Ray\Ray {}
+
+    /**
+     * Smarty 4.5.7, as shipped in xoops_lib. Only the parts TemplateResource
+     * builds on. Signatures are copied from the real library, untyped where the
+     * real ones are untyped — fetch() in particular takes its last two
+     * parameters by reference and declares no types, and the override in
+     * TemplateResource has to stay compatible with exactly that.
+     */
+    class Smarty
+    {
+        public function registerResource(string $name, \Smarty_Resource $resource_handler): static {}
+    }
+
+    class Smarty_Template_Source
+    {
+        public string $name;
+
+        public string $type;
+
+        public bool $exists;
+
+        /** @var int|false */
+        public $timestamp;
+    }
+
+    abstract class Smarty_Resource
+    {
+    }
+
+    abstract class Smarty_Resource_Custom extends \Smarty_Resource
+    {
+        /**
+         * Untyped on purpose, like the real library: Smarty_Resource_Db sets
+         * both by-ref parameters to null when stat() fails on the resolved
+         * file, so neither is guaranteed to be a string or an int on return.
+         *
+         * @param mixed $name
+         * @param mixed $source
+         * @param mixed $mtime
+         */
+        abstract protected function fetch($name, &$source, &$mtime);
+    }
+
+    /** htdocs/class/smarty3_plugins/resource.db.php */
+    class Smarty_Resource_Db extends \Smarty_Resource_Custom
+    {
+        /**
+         * @param mixed $name
+         * @param mixed $source
+         * @param mixed $mtime
+         */
+        protected function fetch($name, &$source, &$mtime) {}
+    }
 }
 
 namespace Xmf {

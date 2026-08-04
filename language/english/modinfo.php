@@ -14,6 +14,8 @@ define('_MI_DEBUGBAR_ENABLE', 'Display DebugBar');
 define('_MI_DEBUGBAR_SMARTYDEBUG', 'Enable Smarty Debug');
 define('_MI_DEBUGBAR_FILESDEBUG', 'Enable Included Files Tab');
 define('_MI_DEBUGBAR_FILESDEBUG_DSC', 'Show all PHP files loaded during the request');
+define('_MI_DEBUGBAR_TRACE_DEPTH', 'Trace depth in DebugBar');
+define('_MI_DEBUGBAR_TRACE_DEPTH_DSC', 'Maximum backtrace frames rendered per message in the bar. The full trace is still written to the log file.');
 define('_MI_DEBUGBAR_SLOWQUERY', 'Slow Query Threshold (seconds)');
 define('_MI_DEBUGBAR_SLOWQUERY_DSC', 'Queries slower than this are highlighted in red (e.g. 0.05 = 50ms)');
 
@@ -29,20 +31,36 @@ define('_MI_DEBUGBAR_SLOWREQUEST', 'Slow Request Threshold (seconds)');
 define('_MI_DEBUGBAR_SLOWREQUEST_DSC', 'Highlight requests that exceed this duration; use 0 to disable the budget warning');
 define('_MI_DEBUGBAR_MEMORY_THRESHOLD', 'Memory Threshold (MB)');
 define('_MI_DEBUGBAR_MEMORY_THRESHOLD_DSC', 'Highlight requests whose peak memory exceeds this value; use 0 to disable the budget warning');
-define('_MI_DEBUGBAR_BUDGET_QUERIES', 'Query count budget');
-define('_MI_DEBUGBAR_BUDGET_QUERY_MS', 'Total SQL time budget (ms)');
-define('_MI_DEBUGBAR_BUDGET_BOOT_MS', 'Bootstrap time budget (ms)');
-define('_MI_DEBUGBAR_BUDGET_TOTAL_MS', 'Request time budget (ms)');
-define('_MI_DEBUGBAR_BUDGET_MEMORY_MB', 'Profiler memory budget (MB)');
-define('_MI_DEBUGBAR_BUDGET_PAYLOAD_KB', 'Response payload budget (KB)');
-define('_MI_DEBUGBAR_NPLUS1_THRESHOLD', 'Repeated-query warning threshold');
-define('_MI_DEBUGBAR_NPLUS1_THRESHOLD_DSC', 'Set to 0 to disable; the minimum enabled threshold is 2 repeated queries');
+define('_MI_DEBUGBAR_BUDGET_QUERIES', 'Budget: query count');
+define('_MI_DEBUGBAR_BUDGET_QUERY_MS', 'Budget: total query time (ms)');
+define('_MI_DEBUGBAR_BUDGET_BOOT_MS', 'Budget: bootstrap time (ms)');
+define('_MI_DEBUGBAR_BUDGET_TOTAL_MS', 'Budget: total request time (ms)');
+define('_MI_DEBUGBAR_BUDGET_MEMORY_MB', 'Budget: peak memory (MB)');
+define('_MI_DEBUGBAR_BUDGET_PAYLOAD_KB', 'Budget: HTML payload (KB)');
+define('_MI_DEBUGBAR_NPLUS1_THRESHOLD', 'N+1 repeat threshold');
+define('_MI_DEBUGBAR_NPLUS1_THRESHOLD_DSC', 'Same query shape repeated this many times in one request is flagged as an N+1 suspect');
 define('_MI_DEBUGBAR_PROFILES_RETENTION', 'Profile retention (days)');
-define('_MI_DEBUGBAR_PROFILES_MAX_ROWS', 'Maximum stored profiles');
+define('_MI_DEBUGBAR_PROFILES_RETENTION_DSC', 'Profiles older than this are trimmed automatically');
+define('_MI_DEBUGBAR_PROFILES_MAX_ROWS', 'Profile row cap');
+define('_MI_DEBUGBAR_PROFILES_MAX_ROWS_DSC', 'Hard cap on stored profile rows (oldest are trimmed first)');
 define('_MI_DEBUGBAR_PROFILES_ENABLE', 'Store request profiles');
-define('_MI_DEBUGBAR_PROFILES_ENABLE_DSC', 'Store compact admin-only performance profiles for later analysis');
-define('_MI_DEBUGBAR_PROFILE_BUTTON_ENABLE', "Show 'Profile this request' button");
-define('_MI_DEBUGBAR_PROFILE_BUTTON_ENABLE_DSC', 'Add a toolbar button that reloads the current page once with an Xdebug profiling trigger; requires xdebug.mode=profile');
+define('_MI_DEBUGBAR_PROFILES_ENABLE_DSC', 'Persist one compact row per profiled request to feed the Analytics page');
+define('_MI_DEBUGBAR_RUM_ENABLE', 'Collect browser web-vitals (RUM beacon)');
+define('_MI_DEBUGBAR_RUM_ENABLE_DSC', 'Inject a small beacon (admins in debug mode only) that reports LCP/INP/CLS back to the Analytics page');
+define('_MI_DEBUGBAR_COLLECT_EVENTS', 'Collect preload events');
+define('_MI_DEBUGBAR_COLLECT_EVENTS_DSC', 'Log XOOPS preload events with listener counts and durations to an Events tab (max 300 rows).');
+define('_MI_DEBUGBAR_COLLECT_TEMPLATES', 'Collect template resolution');
+define('_MI_DEBUGBAR_COLLECT_TEMPLATES_DSC', 'Log which source (theme override, module file, database) served each template to a Templates tab (max 300 rows).');
+define('_MI_DEBUGBAR_XDEBUG_BUTTON', "Show 'Profile this request' button");
+define('_MI_DEBUGBAR_XDEBUG_BUTTON_DSC', 'Adds a button to the debug bar (admins in debug mode only) that arms a one-shot Xdebug profile trigger for the next page load');
+define('_MI_DEBUGBAR_EXPLAIN_ON_DEMAND', 'On-demand SQL EXPLAIN');
+define('_MI_DEBUGBAR_EXPLAIN_ON_DEMAND_DSC', 'Adds an EXPLAIN button to Queries rows (admin-only, two-step confirm). The server only EXPLAINs SELECT statements it recorded itself for the current request. Off by default.');
+define('_MI_DEBUGBAR_EXPLAIN_SLOW', 'EXPLAIN slow queries');
+define('_MI_DEBUGBAR_EXPLAIN_SLOW_DSC', 'Run EXPLAIN on the slowest SELECTs and flag full scans / filesorts (dev mode only)');
+define('_MI_DEBUGBAR_COPY_REDACT', 'Redact secrets in copied output');
+define('_MI_DEBUGBAR_COPY_REDACT_DSC', 'Mask password/token/session/cookie values in the Copy-to-clipboard output. Display in the bar is never redacted.');
+define('_MI_DEBUGBAR_EDITOR_LINK', 'Editor for source links');
+define('_MI_DEBUGBAR_EDITOR_LINK_DSC', 'Editor that opens when clicking a source location in the DebugBar. Ignored when php.ini xdebug.file_link_format is set (that takes precedence).');
 define('_MI_DEBUGBAR_MONOLOG_ENABLE', 'Enable Monolog file logging');
 define('_MI_DEBUGBAR_MONOLOG_ENABLE_DSC', 'Write XOOPS warnings and more severe messages to the protected xoops_data logs directory.');
 define('_MI_DEBUGBAR_MONOLOG_LEVEL', 'Monolog minimum level');
@@ -53,13 +71,13 @@ define('_MI_DEBUGBAR_LEVEL_NOTICE', 'Notice');
 define('_MI_DEBUGBAR_LEVEL_WARNING', 'Warning (recommended)');
 define('_MI_DEBUGBAR_LEVEL_ERROR', 'Error');
 define('_MI_DEBUGBAR_LEVEL_CRITICAL', 'Critical');
-define('_MI_DEBUGBAR_BUDGET_DSC', 'Set to 0 to disable this budget');
+define('_MI_DEBUGBAR_BUDGET_DSC', 'Requests exceeding this are flagged in the Perf tab and Analytics; 0 disables the check');
 
 define('_MI_DEBUGBAR_ADMENU1', 'Home');
-define('_MI_DEBUGBAR_MENU_ABOUT', 'About');
 define('_MI_DEBUGBAR_MENU_ANALYTICS', 'Analytics');
 define('_MI_DEBUGBAR_MENU_LOGS', 'Logs');
 define('_MI_DEBUGBAR_MENU_DIAGNOSTICS', 'Diagnostics');
+define('_MI_DEBUGBAR_MENU_ABOUT', 'About');
 define('_MI_DEBUGBAR_ANALYTICS', _MI_DEBUGBAR_MENU_ANALYTICS);
 
 //Help
@@ -72,3 +90,14 @@ define('_MI_DEBUGBAR_ANALYTICS', _MI_DEBUGBAR_MENU_ANALYTICS);
 \define('_MI_DEBUGBAR_DISCLAIMER', 'Disclaimer');
 \define('_MI_DEBUGBAR_LICENSE', 'License');
 \define('_MI_DEBUGBAR_SUPPORT', 'Support');
+
+// Preferences section dividers (line_break). Values carry <strong> markup so
+// the header renders bold; XOOPS emits a constant title unescaped (a plain
+// string title would be HTML-escaped and show the tags literally).
+\define('_MI_DEBUGBAR_HDR_GENERAL', '<strong>General</strong>');
+\define('_MI_DEBUGBAR_HDR_INTEGRATIONS', '<strong>Integrations &amp; external tools</strong>');
+\define('_MI_DEBUGBAR_HDR_QUERIES', '<strong>Queries &amp; SQL</strong>');
+\define('_MI_DEBUGBAR_HDR_PERFORMANCE', '<strong>Performance</strong>');
+\define('_MI_DEBUGBAR_HDR_PROFILES', '<strong>Profiles &amp; Analytics</strong>');
+\define('_MI_DEBUGBAR_HDR_PRIVACY', '<strong>Privacy</strong>');
+\define('_MI_DEBUGBAR_HDR_ADVANCED', '<strong>Advanced: core-seam collectors</strong>');

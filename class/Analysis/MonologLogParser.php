@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace XoopsModules\Debugbar\Analysis;
 
+defined('XOOPS_ROOT_PATH') || exit('Restricted access');
+
 final class MonologLogParser
 {
     /**

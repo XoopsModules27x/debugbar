@@ -801,6 +801,20 @@ window.PhpDebugBar = window.PhpDebugBar || {};
                     this.setTheme('auto');
                 }
             });
+
+            // A site theme toggle usually only rewrites the attribute on <html>,
+            // without reloading, so watch for that too. Otherwise switching the
+            // page to dark leaves the toolbar light until the next page load.
+            if (typeof MutationObserver === 'function') {
+                new MutationObserver(() => {
+                    if (this.options.theme === 'auto') {
+                        this.setTheme('auto');
+                    }
+                }).observe(document.documentElement, {
+                    attributes: true,
+                    attributeFilter: ['data-bs-theme', 'data-theme']
+                });
+            }
         }
 
         /**
@@ -843,12 +857,33 @@ window.PhpDebugBar = window.PhpDebugBar || {};
             this.recomputeBottomOffset();
         }
 
+        /**
+         * Resolve what 'auto' means right now.
+         *
+         * The operating-system preference alone is not enough: a XOOPS theme
+         * switched to dark inside a light OS session left the toolbar bright
+         * white against a dark page. The surrounding document is asked first
+         * — themes on this line advertise their mode as data-bs-theme (the
+         * Bootstrap 5.3 convention) or data-theme on <html> — and the media
+         * query is the fallback for a theme that says nothing.
+         *
+         * @return {string} 'dark' or 'light'
+         */
+        resolveAutoTheme() {
+            const root = document.documentElement;
+            const declared = (root.getAttribute('data-bs-theme') || root.getAttribute('data-theme') || '').toLowerCase();
+            if (declared === 'dark' || declared === 'light') {
+                return declared;
+            }
+
+            return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+
         setTheme(theme) {
             this.options.theme = theme;
 
             if (theme === 'auto') {
-                const mediaQueryList = window.matchMedia('(prefers-color-scheme: dark)');
-                theme = mediaQueryList.matches ? 'dark' : 'light';
+                theme = this.resolveAutoTheme();
             }
 
             this.el.setAttribute('data-theme', theme);
@@ -2031,4 +2066,161 @@ window.PhpDebugBar = window.PhpDebugBar || {};
     }
 
     PhpDebugBar.AjaxHandler = AjaxHandler;
+})();
+
+/* ==========================================================================
+ * XOOPS presentation pass: tab labels, tooltips, and the dataset URL.
+ *
+ * Deliberately a post-pass over the rendered DOM rather than edits inside the
+ * code above. Tab labels come from the PHP collector names, and those same
+ * names are the dataset STORAGE keys -- renaming them server-side would change
+ * what is persisted and break the History tab against records written by an
+ * earlier version. Relabelling belongs in the presentation layer, and a
+ * MutationObserver keeps it upstream-agnostic: nothing here reaches into
+ * PhpDebugBar internals, so a future php-debugbar release cannot quietly move
+ * the hook out from under it.
+ * ========================================================================== */
+(function () {
+    'use strict';
+
+    // Long name -> short label. The long name is restored as the title attribute,
+    // so nothing is lost: the label is for scanning, the tooltip for certainty.
+    // Note "Request Details" does NOT become "Request" -- there is already a tab
+    // by that name, and two tabs sharing a label is worse than a long one.
+    var LABELS = {
+        'Request Timeline': 'Timeline',
+        'Smarty Files': 'Smarty',
+        'Request Details': 'Details',
+        'Request Summary': 'Summary'
+    };
+
+    function shorten(root) {
+        var tabs = root.querySelectorAll('a.phpdebugbar-tab');
+        for (var i = 0; i < tabs.length; i++) {
+            var tab = tabs[i];
+            var span = tab.querySelector('span.phpdebugbar-text');
+            if (!span) {
+                continue;
+            }
+
+            // The original label is stashed on first sight. Re-reading the
+            // element's text on a later pass would read whatever we wrote last
+            // time, and the map would then have nothing to match on.
+            if (!tab.hasAttribute('data-xoops-fulllabel')) {
+                tab.setAttribute('data-xoops-fulllabel', span.textContent.trim());
+            }
+            var full = tab.getAttribute('data-xoops-fulllabel');
+
+            if (Object.prototype.hasOwnProperty.call(LABELS, full)) {
+                var short = LABELS[full];
+                if (span.textContent !== short) {
+                    span.textContent = short;
+                }
+            }
+
+            // Upstream only reveals a label on hover in mini (icon-only) mode, as a
+            // floating element. In full mode there is no tooltip at all, so a
+            // shortened or ambiguous label has no way to explain itself. A title
+            // attribute works in both modes and costs nothing.
+            if (full !== '' && tab.getAttribute('title') !== full) {
+                tab.setAttribute('title', full);
+            }
+        }
+    }
+
+    /* The dataset switcher is a native <select>. A closed <select> can only render
+     * the selected option's own text, so "file name when closed, full URL when
+     * open" is not expressible declaratively -- the text has to be swapped around
+     * the moment the list opens. Both forms are kept on the option itself so the
+     * swap is idempotent and survives php-debugbar re-rendering the control. */
+    function fileNameOf(label) {
+        // Labels look like: "#1 newbb/list.topic.php?start=60&status=all (01:56:34)"
+        var m = /^(#\d+\s+)?([^\s?]+)/.exec(label);
+        if (!m) {
+            return label;
+        }
+        var prefix = m[1] || '';
+        var path = m[2].split('/').pop();
+        return path === '' ? label : (prefix + path).trim();
+    }
+
+    function bindSwitcher(root) {
+        var selects = root.querySelectorAll('.phpdebugbar-datasets-switcher select');
+        for (var i = 0; i < selects.length; i++) {
+            var sel = selects[i];
+            if (sel.__xoopsUrlBound) {
+                continue;
+            }
+            sel.__xoopsUrlBound = true;
+
+            var collapse = function (s) {
+                for (var j = 0; j < s.options.length; j++) {
+                    var o = s.options[j];
+                    if (!o.hasAttribute('data-xoops-full')) {
+                        o.setAttribute('data-xoops-full', o.textContent);
+                    }
+                    o.textContent = fileNameOf(o.getAttribute('data-xoops-full'));
+                    o.title = o.getAttribute('data-xoops-full');
+                }
+            };
+            var expand = function (s) {
+                for (var j = 0; j < s.options.length; j++) {
+                    var o = s.options[j];
+                    if (o.hasAttribute('data-xoops-full')) {
+                        o.textContent = o.getAttribute('data-xoops-full');
+                    }
+                }
+            };
+
+            (function (s, collapseFn, expandFn) {
+                collapseFn(s);
+                // mousedown rather than focus: focus fires after the list is already
+                // laid out in some browsers, which shows one frame of short labels.
+                s.addEventListener('mousedown', function () { expandFn(s); });
+                s.addEventListener('keydown', function () { expandFn(s); });
+                s.addEventListener('blur', function () { collapseFn(s); });
+                s.addEventListener('change', function () { collapseFn(s); });
+            })(sel, collapse, expand);
+        }
+    }
+
+    function apply() {
+        var bar = document.querySelector('div.phpdebugbar');
+        if (!bar) {
+            return;
+        }
+        shorten(bar);
+        bindSwitcher(bar);
+    }
+
+    function start() {
+        apply();
+
+        var bar = document.querySelector('div.phpdebugbar');
+        if (!bar || typeof MutationObserver === 'undefined') {
+            return;
+        }
+
+        // php-debugbar rebuilds the tab strip when a dataset is added (AJAX
+        // requests do this on a live page), which would silently undo the pass.
+        // Guarded against self-triggering: apply() only writes when a value
+        // actually differs, so the observer settles after one extra cycle.
+        var scheduled = false;
+        new MutationObserver(function () {
+            if (scheduled) {
+                return;
+            }
+            scheduled = true;
+            window.setTimeout(function () {
+                scheduled = false;
+                apply();
+            }, 50);
+        }).observe(bar, { childList: true, subtree: true });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', start);
+    } else {
+        start();
+    }
 })();

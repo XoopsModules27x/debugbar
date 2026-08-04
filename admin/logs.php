@@ -3,12 +3,26 @@
 declare(strict_types=1);
 
 use Xmf\Request;
+use XoopsModules\Debugbar\Admin\AccessPolicy;
 use XoopsModules\Debugbar\Analysis\LogCatalog;
 use XoopsModules\Debugbar\Analysis\MonologLogParser;
 
 require_once __DIR__ . '/admin_header.php';
-$adminObject = \Xmf\Module\Admin::getInstance();
 xoops_cp_header();
+
+// This page renders log file contents — statements, paths, and whatever a
+// module chose to log. It belongs behind the same gate as Analytics and
+// Diagnostics, which additionally require XOOPS debug mode to be on and the
+// module itself to be enabled; being a module admin alone is not the bar. This
+// was the one data-exposing page still gated only by admin_header.php.
+if (! AccessPolicy::isAllowed()) {
+    echo '<p style="color:#a00;font-weight:bold;">' . htmlspecialchars(_AM_DEBUGBAR_LOGS_FORBIDDEN, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</p>';
+    require_once __DIR__ . '/admin_footer.php';
+
+    return;
+}
+
+$adminObject = \Xmf\Module\Admin::getInstance();
 $adminObject->displayNavigation(basename(__FILE__));
 
 $varPath = defined('XOOPS_VAR_PATH') && XOOPS_VAR_PATH !== ''
@@ -26,21 +40,26 @@ echo '<link rel="stylesheet" href="' . $esc(XOOPS_URL . '/modules/debugbar/asset
 
 echo '<h2>' . $esc(_AM_DEBUGBAR_LOGS_TITLE) . '</h2>';
 if ($requested !== '') {
-    echo '<p><a href="logs.php">&larr; ' . $esc(_AM_DEBUGBAR_LOGS_BACK) . '</a></p>';
+    echo '<p><a class="debugbar-log-back" href="logs.php">&larr; ' . $esc(_AM_DEBUGBAR_LOGS_BACK) . '</a></p>';
     $contents = $catalog->read($requested);
     if ($contents === null) {
         echo '<p>' . $esc(_AM_DEBUGBAR_LOGS_MISSING) . '</p>';
     } else {
+        // Stated once, directly under the back button, for both log kinds. This
+        // is not decoration: the reader is looking at the tail of a file, and a
+        // log that has been truncated looks exactly like a log that is short.
+        // It used to appear only for the raw view, while the parsed view buried
+        // it in small grey meta text at the far side of the panel header.
+        echo '<p class="debugbar-log-tail-note">' . $esc(_AM_DEBUGBAR_LOGS_TAIL_NOTE) . '</p>';
         $isMonolog = $requested !== LogCatalog::SOURCE_CORE;
         if (! $isMonolog) {
-            echo '<p>' . $esc(_AM_DEBUGBAR_LOGS_TAIL_NOTE) . '</p>';
             echo '<pre class="debugbar-log-raw">' . $esc($contents) . '</pre>';
         } else {
             $entries = array_reverse((new MonologLogParser())->parse($contents));
             echo '<section class="debugbar-log-panel"><header class="debugbar-log-panel-header">'
                 . '<h3 class="debugbar-log-panel-title">' . $esc(_AM_DEBUGBAR_LOGS_ACTIVITY)
                 . ' <span class="debugbar-log-count">' . $esc(sprintf(_AM_DEBUGBAR_LOGS_ENTRY_COUNT, count($entries))) . '</span></h3>'
-                . '<span class="debugbar-log-panel-meta">' . $esc(_AM_DEBUGBAR_LOGS_NEWEST_FIRST) . ' &middot; ' . $esc(_AM_DEBUGBAR_LOGS_TAIL_NOTE) . '</span>'
+                . '<span class="debugbar-log-panel-meta">' . $esc(_AM_DEBUGBAR_LOGS_NEWEST_FIRST) . '</span>'
                 . '</header><div class="debugbar-log-table-wrap"><table class="debugbar-log-table"><thead><tr>'
                 . '<th>' . $esc(_AM_DEBUGBAR_LOGS_TIME) . '</th><th>' . $esc(_AM_DEBUGBAR_LOGS_LEVEL) . '</th>'
                 . '<th>' . $esc(_AM_DEBUGBAR_LOGS_DESCRIPTION_COLUMN) . '</th><th>' . $esc(_AM_DEBUGBAR_LOGS_CHANNEL) . '</th>'
@@ -77,10 +96,17 @@ if ($requested !== '') {
                 echo '<tr><td><time class="debugbar-log-time" datetime="' . $esc($entry['timestamp']) . '" title="' . $esc($timestamp) . '">'
                     . '<strong>' . $esc($timestamp) . '</strong></time></td>'
                     . '<td><span class="debugbar-log-level debugbar-log-level--' . $esc($level) . '">' . $esc($level) . '</span></td>'
-                    . '<td class="debugbar-log-description">' . $esc($entry['message'])
+                    // Truncation lives on an inner span, not the cell: browsers
+                    // largely ignore max-width on a td under auto table layout,
+                    // which is why these two columns used to run over the ones
+                    // beside them. title= keeps the untruncated value one hover
+                    // away — a clipped file path with no way to read it in full
+                    // would be worse than a wide column.
+                    . '<td class="debugbar-log-description"><span class="debugbar-log-clip" title="' . $esc($entry['message']) . '">' . $esc($entry['message']) . '</span>'
                     . ($error !== '' ? ' <span class="debugbar-log-error">' . $esc($error) . '</span>' : '') . '</td>'
                     . '<td><span class="debugbar-log-channel">' . $esc($entry['channel']) . '</span></td>'
-                    . '<td class="debugbar-log-location">' . $esc($location !== '' ? $location : '—') . '</td><td>';
+                    . '<td class="debugbar-log-location"><span class="debugbar-log-clip" title="' . $esc($location) . '">'
+                    . $esc($location !== '' ? $location : '—') . '</span></td><td>';
                 if ($entry['context'] !== [] || $entry['extra'] !== []) {
                     $detail = ['context' => $entry['context']];
                     if ($entry['extra'] !== []) {

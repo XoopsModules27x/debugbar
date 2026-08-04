@@ -6,9 +6,31 @@ namespace XoopsModules\Debugbar\Analysis;
 
 defined('XOOPS_ROOT_PATH') || exit('Restricted access');
 
-/** Analyse the compact query log without touching the database. */
+// Pure analysis: no database, no core services, so a unit test can load this
+// class on its own — it only needs XOOPS_ROOT_PATH defined for the guard above,
+// which every other class in the module also carries.
+
+/**
+ * Analyse the compact query log without touching the database.
+ *
+ * N+1 / duplicate detection uses *exact* SQL identity (whitespace-normalised),
+ * not a fully parameterised fingerprint. Stripping every integer made legitimate
+ * one-shot loads look identical, e.g.:
+ *
+ *   SELECT * FROM config WHERE conf_modid = 22
+ *   SELECT * FROM config WHERE conf_modid = 155
+ *
+ * were fingerprinted as one "repeated" query. Real N+1s we care about on XOOPS
+ * pages are usually the same statement re-executed (same mid, same tpl_file, …).
+ *
+ * A separate shape fingerprint (strings + numbers collapsed) is retained for
+ * "similar_shapes" so classic id-loop N+1 can still be spotted when useful.
+ */
 final class QueryAnalyzer
 {
+    /** Maximum entries returned per findings list, so one pathological page cannot flood the report. */
+    public const MAX_REPORTED = 10;
+
     /**
      * @param array<int, array<string, mixed>> $queries
      * @return array{
@@ -18,20 +40,34 @@ final class QueryAnalyzer
      *     slowest_ms: float,
      *     slowest_fp: string,
      *     worst_repeat: int,
-     *     duplicates: list<array{sql: string, count: int}>,
-     *     n_plus_one: list<array{sql: string, count: int}>,
-     *     slow: list<array{sql: string, ms: float}>
+     *     duplicates: list<array{sql: string, count: int, origins: list<string>}>,
+     *     n_plus_one: list<array{sql: string, count: int, origins: list<string>}>,
+     *     similar_shapes: list<array{sql: string, count: int, variants: int, origins: list<string>}>,
+     *     slow: list<array{sql: string, ms: float, sql_truncated: bool}>
      * }
      */
     public static function analyze(array $queries, float $slowThreshold, int $repeatThreshold = 5): array
     {
         $repeatThreshold = self::normalizeRepeatThreshold($repeatThreshold);
-        $fingerprints = [];
-        $duplicates = [];
+        $exactCounts = [];
+        $exactSamples = [];
+        $shapeCounts = [];
+        $shapeSamples = [];
+        $shapeVariants = [];
+        /** @var array<string, array<string, int>> $exactOrigins call site => hits, per exact statement */
+        $exactOrigins = [];
+        /** @var array<string, array<string, int>> $shapeOrigins call site => hits, per statement shape */
+        $shapeOrigins = [];
         $slow = [];
         $total = 0.0;
         $errors = 0;
         $count = 0;
+        // Tracked over every query, not just the ones past the slow threshold:
+        // on a page where nothing is slow enough to report, the slowest query is
+        // still the one worth recording against the profile.
+        $slowestMs = 0.0;
+        $slowestSql = '';
+
         foreach ($queries as $query) {
             $sql = trim((string) ($query['sql'] ?? ''));
             $ms = (float) ($query['ms'] ?? 0.0);
@@ -40,32 +76,104 @@ final class QueryAnalyzer
             }
             $count++;
             $total += $ms;
-            $fingerprint = self::fingerprint($sql);
-            $fingerprints[$fingerprint] = ($fingerprints[$fingerprint] ?? 0) + 1;
-            $duplicates[$fingerprint] = ['sql' => $sql, 'count' => $fingerprints[$fingerprint]];
+
+            $origin = trim((string) ($query['origin'] ?? ''));
+
+            $exactKey = self::exactKey($sql);
+            $exactCounts[$exactKey] = ($exactCounts[$exactKey] ?? 0) + 1;
+            $exactSamples[$exactKey] = $sql;
+            if ('' !== $origin) {
+                $exactOrigins[$exactKey][$origin] = ($exactOrigins[$exactKey][$origin] ?? 0) + 1;
+            }
+
+            $shapeKey = QueryFingerprinter::fingerprint($sql);
+            // A refused fingerprint is not a shape. Every refusal returns the
+            // same constant, so counting them as one key merged unrelated
+            // statements into a single group and reported it as an N+1: three
+            // different statements carrying a quote-bearing comment became one
+            // finding with six executions across three variants.
+            if (QueryFingerprinter::FINGERPRINT_FAILED !== $shapeKey) {
+                $shapeCounts[$shapeKey] = ($shapeCounts[$shapeKey] ?? 0) + 1;
+                $shapeSamples[$shapeKey] = $sql;
+                $shapeVariants[$shapeKey][$exactKey] = true;
+                if ('' !== $origin) {
+                    $shapeOrigins[$shapeKey][$origin] = ($shapeOrigins[$shapeKey][$origin] ?? 0) + 1;
+                }
+            }
+
             if (self::hasError($query['error'] ?? null)) {
                 $errors++;
             }
+            if ($ms > $slowestMs) {
+                $slowestMs = $ms;
+                $slowestSql = $sql;
+            }
             if ($ms >= $slowThreshold * 1000.0) {
-                $slow[] = ['sql' => $sql, 'ms' => $ms];
+                // Carry the truncation flag through: Profiler::explainSlowQueries()
+                // reads these rebuilt entries, not the logger's, so dropping it
+                // here left the automatic EXPLAIN path still running against
+                // statements cut at QUERY_SQL_CAP while the stash path skipped
+                // them correctly.
+                $slow[] = [
+                    'sql' => $sql,
+                    'ms' => $ms,
+                    'sql_truncated' => true === ($query['sql_truncated'] ?? false),
+                ];
             }
         }
-        uasort($duplicates, static fn (array $a, array $b): int => $b['count'] <=> $a['count']);
+
+        $duplicates = [];
+        foreach ($exactCounts as $key => $n) {
+            $duplicates[] = [
+                'sql' => $exactSamples[$key],
+                'count' => $n,
+                'origins' => self::topOrigins($exactOrigins[$key] ?? []),
+            ];
+        }
+        usort($duplicates, static fn (array $a, array $b): int => $b['count'] <=> $a['count']);
+
         usort($slow, static fn (array $a, array $b): int => $b['ms'] <=> $a['ms']);
+
         $nPlusOne = $repeatThreshold === 0
             ? []
-            : array_filter($duplicates, static fn (array $row): bool => $row['count'] >= $repeatThreshold);
+            : array_values(array_filter($duplicates, static fn (array $row): bool => $row['count'] >= $repeatThreshold));
+
+        // Shape-based: many executions of the same pattern with multiple distinct
+        // exact variants (classic SELECT … WHERE id = N loop). Ignore shapes that
+        // are already reported as exact duplicates.
+        $similarShapes = [];
+        if ($repeatThreshold > 0) {
+            foreach ($shapeCounts as $shapeKey => $n) {
+                $variants = count($shapeVariants[$shapeKey] ?? []);
+                // The >= 3 variant floor also excludes pure exact-dupe shapes (a single
+                // variant repeated), which are already reported as exact duplicates.
+                if ($n < $repeatThreshold || $variants < 3) {
+                    continue;
+                }
+                $similarShapes[] = [
+                    'sql' => $shapeSamples[$shapeKey],
+                    'count' => $n,
+                    'variants' => $variants,
+                    'origins' => self::topOrigins($shapeOrigins[$shapeKey] ?? []),
+                ];
+            }
+            usort($similarShapes, static fn (array $a, array $b): int => $b['count'] <=> $a['count']);
+        }
 
         return [
             'count' => $count,
             'total_ms' => round($total, 3),
             'error_count' => $errors,
-            'slowest_ms' => $slow[0]['ms'] ?? 0.0,
-            'slowest_fp' => isset($slow[0]) ? self::fingerprint($slow[0]['sql']) : '',
+            'slowest_ms' => $slowestMs,
+            'slowest_fp' => $slowestSql === '' ? '' : QueryFingerprinter::fingerprint($slowestSql),
             'worst_repeat' => $nPlusOne === [] ? 0 : max(array_column($nPlusOne, 'count')),
-            'duplicates' => array_values(array_filter($duplicates, static fn (array $row): bool => $row['count'] > 1)),
-            'n_plus_one' => array_values($nPlusOne),
-            'slow' => $slow,
+            // Capped: a page issuing thousands of queries would otherwise flood the
+            // Performance panel, the flight-recorder JSON, and the warning log with
+            // one entry per finding. The counts above stay exact.
+            'duplicates' => array_slice(array_values(array_filter($duplicates, static fn (array $row): bool => $row['count'] > 1)), 0, self::MAX_REPORTED),
+            'n_plus_one' => array_slice($nPlusOne, 0, self::MAX_REPORTED),
+            'similar_shapes' => array_slice($similarShapes, 0, self::MAX_REPORTED),
+            'slow' => array_slice($slow, 0, self::MAX_REPORTED),
         ];
     }
 
@@ -83,14 +191,39 @@ final class QueryAnalyzer
         return ! in_array($error, [null, false, 0, 0.0, '', '0', []], true);
     }
 
-    public static function fingerprint(string $sql): string
+    /**
+     * The most frequent call sites for one statement, formatted for display.
+     *
+     * Capped at two: a third rarely changes the decision, and these strings sit
+     * inline in panel messages where length costs readability.
+     *
+     * @param array<string, int> $origins call site => hit count
+     *
+     * @return list<string>
+     */
+    private static function topOrigins(array $origins): array
     {
-        $sql = preg_replace("/'(?:''|[^'])*'/", '?', $sql) ?? $sql;
-        $sql = preg_replace('/"(?:""|[^"])*"/', '?', $sql) ?? $sql;
-        $sql = preg_replace('/\b\d+(?:\.\d+)?\b/', '?', $sql) ?? $sql;
-        $sql = preg_replace('/\s+/', ' ', trim($sql)) ?? $sql;
-        $sql = preg_replace('/\s*([=<>])\s*/', '$1', $sql) ?? $sql;
+        arsort($origins);
+        $formatted = [];
+        foreach (array_slice($origins, 0, 2, true) as $origin => $hits) {
+            $formatted[] = $hits > 1 ? sprintf('%s (x%d)', $origin, $hits) : $origin;
+        }
 
-        return hash('sha256', strtolower($sql));
+        return $formatted;
+    }
+
+    /**
+     * Exact-identity key for duplicate / N+1 detection (keeps module ids etc.).
+     */
+    public static function exactKey(string $sql): string
+    {
+        $sql = preg_replace('/\s+/', ' ', trim($sql)) ?? $sql;
+        $sql = preg_replace('/\s*([=<>(),])\s*/', '$1', $sql) ?? $sql;
+
+        // Hashed, not returned whole: this is only ever an array key, and a page
+        // issuing thousands of queries otherwise held a second full copy of
+        // every statement (up to QUERY_SQL_CAP each) purely as key material.
+        // xxh128 matches the digest used elsewhere in the module.
+        return hash('xxh128', strtolower($sql));
     }
 }

@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace XoopsModules\Debugbar\Analysis;
 
-use XoopsModules\Debugbar\ExplainSecretStore;
-
 defined('XOOPS_ROOT_PATH') || exit('Restricted access');
 
 /**
@@ -47,6 +45,9 @@ final class SystemDiagnostics
                 ),
                 $this->row('environment', defined('XOOPS_ENV') ? (string) XOOPS_ENV : 'Not defined', 'info'),
                 $this->row('timezone', date_default_timezone_get(), 'info'),
+                $this->debugFileRow(),
+                $this->errorHandlerRow(),
+                $this->sqlModeRow(),
             ],
             'themes' => [
                 $this->directoryRow('front_theme', $frontTheme, $this->rootPath . '/themes/' . $frontTheme),
@@ -64,7 +65,7 @@ final class SystemDiagnostics
                 $this->packageRow('whoops', ['filp/whoops']),
                 $this->packageRow('ray', ['spatie/ray', 'spatie/global-ray'], function_exists('ray')),
                 $this->tracyBootstrapRow(),
-                $this->explainSecretRow(),
+                $this->explainStashRow(),
             ],
             'storage' => [
                 $this->writableRow('logs', $this->varPath . '/logs'),
@@ -130,6 +131,191 @@ final class SystemDiagnostics
         return $this->row($id, 'Not installed', 'info');
     }
 
+    /**
+     * Who currently holds PHP's error handler.
+     *
+     * The only state on this page that is invisible everywhere else AND silently disables
+     * features when it changes. PHP has one error handler; whoever calls
+     * set_error_handler() last owns it. When it is taken away from XoopsLogger, DebugBar's
+     * Messages tab simply goes empty -- no error, no log line, no other symptom. "Why is
+     * my Messages tab blank" has no other tell anywhere in the system.
+     *
+     * Probed, not assumed: set_error_handler() returns the handler it displaces, so
+     * installing a throwaway closure and immediately popping it reports the live one and
+     * leaves the stack exactly as it was.
+     *
+     * Limitation worth stating: register_shutdown_function() has no getter, so a shutdown
+     * handler cannot be reported here -- and that is the part of Whoops which catches
+     * genuine fatals.
+     *
+     * @return array{id: string, value: string, status: string, detail: string}
+     */
+    private function errorHandlerRow(): array
+    {
+        $current = set_error_handler(static fn (): bool => false);
+        restore_error_handler();
+
+        $name = $this->describeCallable($current);
+        $detected = match (true) {
+            '' === $name => 'php',
+            str_contains($name, 'XoopsErrorHandler'), str_contains($name, 'XoopsLogger') => 'core',
+            str_contains($name, 'Whoops') => 'whoops',
+            str_contains($name, 'Tracy') => 'tracy',
+            default => 'other',
+        };
+
+        $declared = function_exists('xoops_getErrorScreenOwner')
+            ? (string) \xoops_getErrorScreenOwner()
+            : '';
+
+        // 'whoops' declared while core still holds the ERROR handler is the designed
+        // outcome, not drift: xwhoops returns the error handler immediately after
+        // register() and keeps only the exception and shutdown handlers.
+        $agrees = '' === $declared
+            || $detected === $declared
+            || ('whoops' === $declared && 'core' === $detected);
+
+        return $this->row(
+            'error_handler',
+            // No inner fallback: the match above maps an empty $name to 'php', so
+            // reaching the false branch means $name is non-empty by construction.
+            'php' === $detected ? 'PHP default' : $name,
+            $agrees ? 'ok' : 'warning',
+            '' === $declared
+                ? 'This XOOPS does not declare an error_screen owner in debug.php.'
+                : sprintf('Declared owner: %s. Detected: %s.', $declared, $detected)
+        );
+    }
+
+    /**
+     * Whether the database connection rejects bad values or silently mangles them.
+     *
+     * Outside strict mode MySQL turns a value that does not fit its column into a
+     * truncation plus a warning nobody reads. XOOPS's own session table is the sharpest
+     * example: sess_data is TEXT (65,535 bytes), and an oversized $_SESSION was therefore
+     * stored truncated, became undecodable, and was destroyed on the next request --
+     * presenting as a lost login or a CSRF failure with no visible link to the write that
+     * caused it. Strict mode turns that into an error at the point of failure.
+     *
+     * Reads $GLOBALS['xoopsDB'] directly. This class otherwise confines itself to the few
+     * config keys it is handed, but there is no way to ask a database about its own mode
+     * without asking the database.
+     *
+     * @return array{id: string, value: string, status: string, detail: string}
+     */
+    private function sqlModeRow(): array
+    {
+        $db = $GLOBALS['xoopsDB'] ?? null;
+        // fetchRow is named here too: the guard has to cover every method this
+        // routine goes on to call, or a loose $xoopsDB satisfies the check and
+        // then fatals on the call below.
+        if (! is_object($db)
+            || ! method_exists($db, 'query')
+            || ! method_exists($db, 'isResultSet')
+            || ! method_exists($db, 'fetchRow')) {
+            return $this->row('sql_mode', 'Unavailable', 'info', 'No database connection to query.');
+        }
+
+        try {
+            $result = $db->query('SELECT @@SESSION.sql_mode');
+            // Two-part fetch guard, per the XOOPS convention: isResultSet() alone
+            // still admits `true`, which query() returns for a statement yielding
+            // no result set, and fetchRow() cannot be handed that.
+            if (! $db->isResultSet($result) || ! ($result instanceof \mysqli_result)) {
+                return $this->row('sql_mode', 'Unavailable', 'info', 'The server returned no result.');
+            }
+            $row = $db->fetchRow($result);
+            $mode = is_array($row) ? trim((string) ($row[0] ?? '')) : '';
+        } catch (\Throwable) {
+            return $this->row('sql_mode', 'Unavailable', 'info', 'The mode could not be read.');
+        }
+
+        if ('' === $mode) {
+            return $this->row(
+                'sql_mode',
+                'Not strict',
+                'warning',
+                'sql_mode is empty: oversized and out-of-range values are truncated silently, not rejected.'
+            );
+        }
+
+        $strict = str_contains($mode, 'STRICT_TRANS_TABLES') || str_contains($mode, 'STRICT_ALL_TABLES');
+
+        return $this->row(
+            'sql_mode',
+            $strict ? 'Strict' : 'Not strict',
+            $strict ? 'ok' : 'warning',
+            $strict
+                ? $mode
+                : 'Oversized values are truncated silently rather than rejected. ' . $mode
+        );
+    }
+
+    /** Render a callable as a readable name without invoking it. */
+    private function describeCallable(mixed $handler): string
+    {
+        if (is_string($handler)) {
+            return $handler;
+        }
+
+        if (is_array($handler) && 2 === count($handler)) {
+            $target = $handler[0];
+
+            return (is_object($target) ? $target::class : (string) $target) . '::' . (string) $handler[1];
+        }
+
+        if ($handler instanceof \Closure) {
+            return 'Closure';
+        }
+
+        // An invokable object is a perfectly legal handler and set_error_handler
+        // accepts one. Reporting it as '' made errorHandlerRow() say "PHP
+        // default" for a handler that was very much installed.
+        return is_object($handler) ? $handler::class . '::__invoke' : '';
+    }
+
+    /**
+     * What xoops_data/data/debug.php is doing this request -- including failing.
+     *
+     * This is the ONLY place a broken debug.php is reported. xoops_getDebugConfig()
+     * deliberately swallows the failure during bootstrap, because at that point nothing
+     * has configured error display and a warning would be emitted under php.ini's rules
+     * -- a path printed to whoever loaded the page on a misconfigured host. The reason is
+     * carried to here instead, where the request is already known to belong to an
+     * authenticated administrator looking at a diagnostics page.
+     *
+     * @return array{id: string, value: string, status: string, detail: string}
+     */
+    private function debugFileRow(): array
+    {
+        if (! function_exists('xoops_getDebugConfig')) {
+            return $this->row('debug_file', 'Not supported', 'info', 'This XOOPS core predates the debug.php loader.');
+        }
+
+        if (function_exists('xoops_getDebugConfigError')) {
+            $error = (string) \xoops_getDebugConfigError();
+            if ('' !== $error) {
+                return $this->row('debug_file', 'Load failed', 'warning', $error);
+            }
+        }
+
+        $config = \xoops_getDebugConfig();
+        if (! is_array($config) || [] === $config) {
+            return $this->row('debug_file', 'Not present', 'ok', 'Production behaviour; no debug.php in xoops_data/data.');
+        }
+
+        $enablesDebugbar = true === ($config['debugbar']['enabled'] ?? false);
+
+        return $this->row(
+            'debug_file',
+            'Active',
+            'info',
+            $enablesDebugbar
+                ? 'debug.php is enabling DebugBar independently of the database Debug Mode.'
+                : 'debug.php is loaded but does not enable DebugBar.'
+        );
+    }
+
     /** @return array{id: string, value: string, status: string, detail: string} */
     private function tracyBootstrapRow(): array
     {
@@ -161,37 +347,46 @@ final class SystemDiagnostics
         return $this->row($id, $writable ? 'Writable' : 'Read only', $writable ? 'ok' : 'warning');
     }
 
-    /** @return array{id: string, value: string, status: string, detail: string} */
-    private function explainSecretRow(): array
+    /**
+     * The on-demand EXPLAIN design now stashes the server's own recorded SQL
+     * server-side instead of trusting a client-submitted signed token (see
+     * DebugbarLogger::stashQueriesForExplain()/explain.php). This row reports
+     * the health of that stash directory instead: does it exist, is it
+     * writable, how many cached entries are sitting in it.
+     *
+     * @return array{id: string, value: string, status: string, detail: string}
+     */
+    private function explainStashRow(): array
     {
-        $status = (new ExplainSecretStore($this->varPath . '/data'))->status();
-        $underDocumentRoot = $this->isPathWithin($this->varPath, $this->rootPath);
+        $path = rtrim($this->varPath, '/\\') . '/caches/debugbar_explain';
 
-        if ($status === 'available') {
+        if (! is_dir($path)) {
             return $this->row(
-                'explain_secret',
-                'Available',
-                $underDocumentRoot ? 'warning' : 'ok',
-                $underDocumentRoot
-                    ? 'Protected data is below the document root; verify that the web server denies direct access.'
-                    : 'Signed EXPLAIN actions are available.'
+                'explain_stash',
+                'Missing',
+                'info',
+                'Created automatically the first time a slow query is stashed for on-demand EXPLAIN.'
             );
         }
 
-        return match ($status) {
-            'invalid' => $this->row('explain_secret', 'Invalid', 'warning', 'Run the module update to replace the signing key.'),
-            'unsafe' => $this->row('explain_secret', 'Unsafe', 'warning', 'The signing-key destination is not a safe regular file.'),
-            'unwritable' => $this->row('explain_secret', 'Unwritable', 'warning', 'Make the protected XOOPS data directory writable and run the module update.'),
-            default => $this->row('explain_secret', 'Missing', 'warning', 'Run the module update to create the signing key.'),
-        };
-    }
+        if (! is_writable($path)) {
+            return $this->row(
+                'explain_stash',
+                'Read only',
+                'warning',
+                'Make the directory writable so slow-query EXPLAIN stashing can work.'
+            );
+        }
 
-    private function isPathWithin(string $path, string $parent): bool
-    {
-        $path = rtrim(str_replace('\\', '/', $path), '/') . '/';
-        $parent = rtrim(str_replace('\\', '/', $parent), '/') . '/';
+        $files = glob($path . '/*.json');
+        $count = is_array($files) ? count($files) : 0;
 
-        return str_starts_with(strtolower($path), strtolower($parent));
+        return $this->row(
+            'explain_stash',
+            'Ready',
+            'ok',
+            sprintf('%d cached %s', $count, $count === 1 ? 'stash file' : 'stash files')
+        );
     }
 
     /** @return array{id: string, value: string, status: string, detail: string} */

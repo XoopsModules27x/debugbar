@@ -21,7 +21,6 @@ function xoops_module_install_debugbar($module)
 {
     $assetsReady = _debugbar_copy_assets();
     $tableReady = _debugbar_create_profiles_table();
-    _debugbar_ensure_explain_secret();
 
     return $assetsReady && $tableReady;
 }
@@ -37,28 +36,221 @@ function xoops_module_update_debugbar($module, $previousVersion)
 {
     $assetsReady = _debugbar_copy_assets();
     $tableReady = _debugbar_create_profiles_table();
-    _debugbar_ensure_explain_secret();
+    $vitalsReady = _debugbar_add_vitals_columns();
+    $blocksReady = _debugbar_add_block_columns();
+    $indexReady = _debugbar_add_request_index();
+    $renameReady = _debugbar_rename_button_config();
+    $scrubReady = _debugbar_scrub_leaky_fingerprints();
 
-    return $assetsReady && $tableReady;
+    return $assetsReady && $tableReady && $vitalsReady && $blocksReady && $indexReady && $renameReady && $scrubReady;
 }
 
-/** Create the optional EXPLAIN signing key without making module setup fatal. */
-function _debugbar_ensure_explain_secret(): bool
+/**
+ * Clear stored query fingerprints that may embed literal values.
+ *
+ * QueryFingerprinter used to scan single- and double-quoted literals in two
+ * separate passes, which let an apostrophe inside a double-quoted value swallow
+ * the opening quote of a later single-quoted literal — leaving that literal's
+ * value in the fingerprint. That fingerprint is persisted as
+ * debugbar_profiles.slowest_fp and surfaced in the Analytics N+1 leaderboard, so
+ * fixing the scanner does not clean rows already written; they survive for the
+ * whole retention window. This clears them.
+ *
+ * Every stored fingerprint is cleared, not just the ones that look wrong.
+ *
+ * A narrower predicate was tried first — "a fully normalised fingerprint
+ * contains no quote character, so clear only rows that still have one" — and it
+ * is wrong in both directions. It MISSES a leaky row whose surviving literal
+ * carried no quote at all (a hex value such as 0x534543524554 normalised to
+ * `?x534543524554`), and it DESTROYS a correctly normalised row whose only
+ * quote sits inside a `backtick` identifier or an SQL comment. Since the point
+ * of this migration is that no stale value survives, completeness beats
+ * preserving history: the cost is at most `profiles_retention_days` of
+ * fingerprints, which regenerate on the next request to each URL.
+ *
+ * Idempotent: after one run every row is already empty and nothing matches.
+ */
+function _debugbar_scrub_leaky_fingerprints(): bool
 {
-    require_once dirname(__DIR__) . '/class/ExplainSecretStore.php';
+    $db = $GLOBALS['xoopsDB'];
+    $table = $db->prefix('debugbar_profiles');
 
     try {
-        $ready = (new \XoopsModules\Debugbar\ExplainSecretStore())->ensure();
-    } catch (\Throwable $exception) {
-        trigger_error('DebugBar EXPLAIN signing key setup failed: ' . $exception->getMessage(), E_USER_WARNING);
+        // exec() returns bool. Ignoring it let a failed UPDATE report success,
+        // so the upgrade claimed the rows were clean while they were untouched.
+        $ok = $db->exec(sprintf(
+            'UPDATE %s SET slowest_fp = %s WHERE slowest_fp <> %s',
+            $table,
+            $db->quote(''),
+            $db->quote('')
+        ));
+
+        if (false === $ok) {
+            trigger_error('DebugBar fingerprint scrub did not complete', E_USER_WARNING);
+
+            return false;
+        }
+
+        return true;
+    } catch (\Throwable $e) {
+        trigger_error('DebugBar fingerprint scrub failed: ' . $e->getMessage(), E_USER_WARNING);
 
         return false;
     }
-    if (! $ready) {
-        trigger_error('DebugBar EXPLAIN signing key is unavailable; EXPLAIN actions remain disabled.', E_USER_WARNING);
-    }
+}
 
-    return $ready;
+/**
+ * Idempotently add the Core Web Vitals columns (lcp_ms/inp_ms/cls) to an
+ * existing debugbar_profiles table. CREATE TABLE IF NOT EXISTS never alters an
+ * existing table, so upgrades from a pre-RUM version need this ALTER. Each
+ * column is added only when information_schema shows it absent.
+ */
+function _debugbar_add_vitals_columns(): bool
+{
+    return _debugbar_add_missing_columns([
+        'lcp_ms' => 'DECIMAL(10,1) NULL DEFAULT NULL',
+        'inp_ms' => 'DECIMAL(10,1) NULL DEFAULT NULL',
+        'cls' => 'DECIMAL(6,4) NULL DEFAULT NULL',
+    ], 'vitals');
+}
+
+/**
+ * Idempotently add the block cache-hit counters to an existing table.
+ *
+ * Block caching is the single largest win available on most XOOPS sites — a
+ * page rendering nineteen uncached blocks pays nineteen block renders, each
+ * with its own queries, on every view. Storing the split per request is what
+ * lets Analytics rank pages by it instead of leaving the administrator to read
+ * the Blocks panel one request at a time.
+ */
+function _debugbar_add_block_columns(): bool
+{
+    return _debugbar_add_missing_columns([
+        'blocks_cached' => 'SMALLINT UNSIGNED NOT NULL DEFAULT 0',
+        'blocks_uncached' => 'SMALLINT UNSIGNED NOT NULL DEFAULT 0',
+    ], 'block counter');
+}
+
+/**
+ * Add columns to debugbar_profiles that information_schema shows absent.
+ *
+ * `CREATE TABLE IF NOT EXISTS` never alters an existing table, so every schema
+ * addition needs an ALTER for installations upgrading from an earlier version.
+ * Existence is checked per column, which is what makes running this repeatedly
+ * safe.
+ *
+ * @param array<string, string> $columns column name => column definition
+ * @param string                $label   used only in the failure warning
+ */
+function _debugbar_add_missing_columns(array $columns, string $label): bool
+{
+    $db = $GLOBALS['xoopsDB'];
+    $table = $db->prefix('debugbar_profiles');
+
+    try {
+        foreach ($columns as $name => $definition) {
+            $result = $db->query(sprintf(
+                'SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s AND COLUMN_NAME = %s',
+                $db->quote($table),
+                $db->quote($name)
+            ));
+            if (! $db->isResultSet($result) || ! $result instanceof \mysqli_result) {
+                return false;
+            }
+            $present = false !== $db->fetchRow($result);
+            if (! $present) {
+                $db->exec(sprintf('ALTER TABLE %s ADD COLUMN %s %s', $table, $name, $definition));
+            }
+        }
+
+        return true;
+    } catch (\Throwable $e) {
+        trigger_error('DebugBar ' . $label . ' column migration failed: ' . $e->getMessage(), E_USER_WARNING);
+
+        return false;
+    }
+}
+
+/**
+ * Idempotently add the request_id index to an existing debugbar_profiles table.
+ * updateVitals() looks a profile up by request_id on every RUM beacon, which is
+ * once per page view; without this index that is a scan of the whole retained
+ * table. CREATE TABLE IF NOT EXISTS never alters an existing table, so upgrades
+ * need this ALTER. Added only when information_schema shows the index absent.
+ */
+function _debugbar_add_request_index(): bool
+{
+    $db = $GLOBALS['xoopsDB'];
+    $table = $db->prefix('debugbar_profiles');
+
+    try {
+        $result = $db->query(sprintf(
+            'SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s AND INDEX_NAME = %s',
+            $db->quote($table),
+            $db->quote('idx_request')
+        ));
+        if (! $db->isResultSet($result) || ! $result instanceof \mysqli_result) {
+            return false;
+        }
+        if (false === $db->fetchRow($result)) {
+            $db->exec(sprintf('ALTER TABLE %s ADD INDEX idx_request (request_id)', $table));
+        }
+
+        return true;
+    } catch (\Throwable $e) {
+        trigger_error('DebugBar request index migration failed: ' . $e->getMessage(), E_USER_WARNING);
+
+        return false;
+    }
+}
+
+/**
+ * Rename the legacy profile_button_enable preference to xdebug_button_enable
+ * in place, preserving the stored value, so the button toggle keeps working
+ * across the config-key rename (matches the main tree's vocabulary). Idempotent:
+ * only acts when the old key still exists and the new one does not.
+ */
+function _debugbar_rename_button_config(): bool
+{
+    $db = $GLOBALS['xoopsDB'];
+    // Narrowed for static analysis: xoops_getHandler() is documented as
+    // returning XoopsObjectHandler, which does not declare getByDirname().
+    /** @var \XoopsModuleHandler $moduleHandler */
+    $moduleHandler = xoops_getHandler('module');
+    $module = $moduleHandler->getByDirname('debugbar');
+    if (! $module instanceof \XoopsModule) {
+        return false;
+    }
+    $mid = (int) $module->getVar('mid');
+    $table = $db->prefix('config');
+
+    try {
+        $result = $db->query(sprintf(
+            "SELECT conf_name FROM %s WHERE conf_modid = %u AND conf_name IN ('profile_button_enable', 'xdebug_button_enable')",
+            $table,
+            $mid
+        ));
+        if (! $db->isResultSet($result) || ! $result instanceof \mysqli_result) {
+            return false;
+        }
+        $present = [];
+        while (false !== ($row = $db->fetchArray($result))) {
+            $present[(string) $row['conf_name']] = true;
+        }
+        if (isset($present['profile_button_enable']) && ! isset($present['xdebug_button_enable'])) {
+            $db->exec(sprintf(
+                "UPDATE %s SET conf_name = 'xdebug_button_enable' WHERE conf_modid = %u AND conf_name = 'profile_button_enable'",
+                $table,
+                $mid
+            ));
+        }
+
+        return true;
+    } catch (\Throwable $e) {
+        trigger_error('DebugBar button-config rename failed: ' . $e->getMessage(), E_USER_WARNING);
+
+        return false;
+    }
 }
 
 function _debugbar_create_profiles_table(): bool
@@ -74,8 +266,12 @@ function _debugbar_create_profiles_table(): bool
         query_ms DECIMAL(10,1) NOT NULL DEFAULT 0, slowest_ms DECIMAL(10,1) NOT NULL DEFAULT 0,
         slowest_fp VARCHAR(255) NOT NULL DEFAULT \'\', n_plus_one SMALLINT UNSIGNED NOT NULL DEFAULT 0,
         peak_mem_kb INT UNSIGNED NOT NULL DEFAULT 0, payload_bytes INT UNSIGNED NOT NULL DEFAULT 0,
-        flags SMALLINT UNSIGNED NOT NULL DEFAULT 0, PRIMARY KEY (profile_id), KEY idx_created (created),
-        KEY idx_url_created (url_hash, created), KEY idx_dirname_created (dirname, created)
+        blocks_cached SMALLINT UNSIGNED NOT NULL DEFAULT 0, blocks_uncached SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+        flags SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+        lcp_ms DECIMAL(10,1) NULL DEFAULT NULL, inp_ms DECIMAL(10,1) NULL DEFAULT NULL, cls DECIMAL(6,4) NULL DEFAULT NULL,
+        PRIMARY KEY (profile_id), KEY idx_created (created),
+        KEY idx_url_created (url_hash, created), KEY idx_dirname_created (dirname, created),
+        KEY idx_request (request_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci';
 
     try {

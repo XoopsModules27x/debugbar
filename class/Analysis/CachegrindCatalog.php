@@ -66,6 +66,20 @@ final class CachegrindCatalog
     }
 
     /**
+     * Remove a single Xdebug profile by name.
+     *
+     * The name is resolved through resolve(), so a caller cannot escape the
+     * configured output directory via traversal or a symlink. Called only by
+     * the CSRF-protected module administration action.
+     */
+    public function delete(string $filename): bool
+    {
+        $path = $this->resolve($filename);
+
+        return $path !== null && self::removeFile($path);
+    }
+
+    /**
      * Remove expired Xdebug profiles from its configured output directory.
      *
      * Called only by the CSRF-protected module administration action.
@@ -118,7 +132,7 @@ final class CachegrindCatalog
         }
     }
 
-    private static function isValidFilename(string $filename): bool
+    public static function isValidFilename(string $filename): bool
     {
         return $filename === basename($filename)
             && ! str_contains($filename, '..')

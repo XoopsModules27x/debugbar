@@ -16,6 +16,9 @@ declare(strict_types=1);
  * @package             debugbar
  */
 
+use XoopsModules\Debugbar\Admin\AccessPolicy;
+use XoopsModules\Debugbar\Collector\PreloadEventSpy;
+use XoopsModules\Debugbar\Collector\TemplateResource;
 use XoopsModules\Debugbar\DebugbarLogger;
 use XoopsModules\Debugbar\RayLogger;
 
@@ -36,6 +39,12 @@ defined('XOOPS_ROOT_PATH') || exit('Restricted access');
  */
 class DebugbarCorePreload extends XoopsPreloadItem
 {
+    /** Watches the event table when collect_events is on; null when not installed. */
+    private static ?PreloadEventSpy $eventSpy = null;
+
+    /** Observes template resolution when collect_templates is on; null when not installed. */
+    private static ?TemplateResource $templateResource = null;
+
     /**
      * core.include.common.start — earliest event in the bootstrap.
      *
@@ -63,6 +72,16 @@ class DebugbarCorePreload extends XoopsPreloadItem
             $logger->startTime('XOOPS');
             $logger->startTime('XOOPS Boot');
 
+            // Watch the event table from here on. This is the earliest point at
+            // which it is fully populated (XoopsPreload's constructor calls
+            // setEvents() before dispatching this event), and events fired
+            // during the rest of the bootstrap — common.language among them —
+            // would otherwise be missed. Whether the admin actually wants them
+            // is not knowable yet: the config handlers do not exist this early,
+            // so the spy records unconditionally and common.end below either
+            // keeps it or puts the plain array back.
+            self::$eventSpy = PreloadEventSpy::install(self::preload());
+
             // Ray is intentionally NOT enabled here. Enabling it at common.start
             // (before authentication) let early bootstrap log/SQL entries reach
             // ray() on anonymous requests before the admin + ray_enable checks
@@ -86,30 +105,21 @@ class DebugbarCorePreload extends XoopsPreloadItem
     {
         $logger = DebugbarLogger::getInstance();
 
-        // Only show debugbar to admin users
-        if (! (bool) ($GLOBALS['xoopsUserIsAdmin'] ?? false)) {
+        // Admin + debug mode + the module's enable switch, as one decision.
+        // This is the SAME call beacon.php, explain.php and xdebug-arm.php make,
+        // which is the point: whatever renders the bar is exactly what accepts
+        // its buttons' requests, so the bar can never offer a control whose
+        // endpoint refuses it. AccessPolicy never throws — a preload must not.
+        if (! AccessPolicy::isRuntimeAllowed()) {
             $logger->disable();
             self::disableRay();
 
             return;
         }
 
-        // Check if debug_mode is enabled in XOOPS config
-        if (isset($GLOBALS['xoopsConfig']['debug_mode']) && (int) $GLOBALS['xoopsConfig']['debug_mode'] === 0) {
-            $logger->disable();
-            self::disableRay();
-
-            return;
-        }
-
-        // Check module config if available
+        // Read once for the tuning knobs below. The enable switch itself is
+        // already decided above, inside AccessPolicy.
         $moduleConfig = self::getModuleConfig();
-        if (is_array($moduleConfig) && isset($moduleConfig['debugbar_enable']) && ! (bool) $moduleConfig['debugbar_enable']) {
-            $logger->disable();
-            self::disableRay();
-
-            return;
-        }
 
         // Apply slow query threshold from module config
         if (is_array($moduleConfig) && isset($moduleConfig['slow_query_threshold'])) {
@@ -131,8 +141,8 @@ class DebugbarCorePreload extends XoopsPreloadItem
         if (is_array($moduleConfig) && isset($moduleConfig['memory_threshold'])) {
             $logger->setMemoryThreshold((int) $moduleConfig['memory_threshold'] * 1024 * 1024);
         }
-        if (is_array($moduleConfig) && isset($moduleConfig['profile_button_enable'])) {
-            $logger->setProfileButtonEnabled((bool) $moduleConfig['profile_button_enable']);
+        if (is_array($moduleConfig) && isset($moduleConfig['trace_depth'])) {
+            $logger->setTraceDepth((int) $moduleConfig['trace_depth']);
         }
 
         // Enable Ray only now (never at common.start): the request has reached
@@ -175,10 +185,12 @@ class DebugbarCorePreload extends XoopsPreloadItem
         $logger = DebugbarLogger::getInstance();
         self::registerMonolog();
 
-        // If no admin user is authenticated, disable debug output.
-        // eventCoreIncludeCommonAuthSuccess handles the admin case;
-        // this catches anonymous requests where that event never fires.
-        if (! (bool) ($GLOBALS['xoopsUserIsAdmin'] ?? false)) {
+        // Same decision as auth.success above, re-asked here because that event
+        // never fires on an anonymous request — this is the seam that catches
+        // them. Asking the identical question at both seams is what makes "the
+        // bar is enabled" and "the endpoints accept" one invariant rather than
+        // two rules that can drift.
+        if (! AccessPolicy::isRuntimeAllowed()) {
             $logger->disable();
             self::disableRay();
         }
@@ -189,8 +201,65 @@ class DebugbarCorePreload extends XoopsPreloadItem
             xoops_loadLanguage('main', 'debugbar');
         }
 
+        // The config handlers exist by now, so the spy installed at
+        // common.start can finally be judged. Uninstalling puts the plain array
+        // back, which is the state every request should end in unless an admin
+        // asked for events.
+        if (null !== self::$eventSpy && (! $logger->isEnabled() || ! self::configEnabled('collect_events'))) {
+            self::$eventSpy->uninstall(self::preload());
+            self::$eventSpy = null;
+        }
+
         $logger->stopTime('XOOPS Boot');
         $logger->startTime('Module init');
+    }
+
+    /**
+     * core.class.template.new — a XoopsTpl instance has just been constructed.
+     *
+     * Take over the `db:` resource so template resolution can be observed. This
+     * must happen here rather than later: Smarty caches the handler for a
+     * resource type the first time it loads one, and ignores a swap after that.
+     *
+     * @param array<int, mixed> $args event arguments; [0] is the XoopsTpl
+     * @return void
+     */
+    public static function eventCoreClassTemplateNew(array $args): void
+    {
+        // Runs for every XoopsTpl on every page. A throw here would take the
+        // site's rendering with it, so nothing in this method may escape.
+        try {
+            $tpl = $args[0] ?? null;
+            if (! $tpl instanceof \Smarty) {
+                return;
+            }
+            if (! DebugbarLogger::getInstance()->isEnabled() || ! self::configEnabled('collect_templates')) {
+                return;
+            }
+
+            // One resource instance for the whole request, shared across the
+            // several XoopsTpl instances a page builds (main, blocks, comments),
+            // so their renders land in one list.
+            if (null === self::$templateResource) {
+                // Smarty only autoloads this when the `db:` resource is first
+                // used, which is after the point we have to register — and our
+                // resource extends it, so it has to exist first.
+                if (! class_exists(\Smarty_Resource_Db::class, false)) {
+                    $coreResource = XOOPS_ROOT_PATH . '/class/smarty3_plugins/resource.db.php';
+                    if (! is_file($coreResource)) {
+                        // A core layout we do not recognise. Skip the collector
+                        // rather than fatal on a missing parent class.
+                        return;
+                    }
+                    require_once $coreResource;
+                }
+                self::$templateResource = new TemplateResource((string) ($GLOBALS['xoopsConfig']['theme_set'] ?? 'default'));
+            }
+            $tpl->registerResource('db', self::$templateResource);
+        } catch (\Throwable $e) {
+            self::$templateResource = null;
+            \trigger_error('debugbar preload (template.new) failed: ' . $e->getMessage(), \E_USER_WARNING);
+        }
     }
 
     /**
@@ -272,6 +341,7 @@ class DebugbarCorePreload extends XoopsPreloadItem
         if (is_array($moduleConfig) && isset($moduleConfig['debug_files_enable'])) {
             $logger->setShowIncludedFiles((bool) $moduleConfig['debug_files_enable']);
         }
+
     }
 
     /**
@@ -284,6 +354,28 @@ class DebugbarCorePreload extends XoopsPreloadItem
     public static function eventCoreFooterEnd(array $args): void
     {
         $logger = DebugbarLogger::getInstance();
+
+        // Flush the collectors here, not at footer.start. core.footer.start
+        // fires at footer.php:21, but the theme only renders at footer.php:51,
+        // and the page's main content template is fetched inside that render
+        // (class/theme.php:601). Flushing at footer.start therefore missed the
+        // single most important template on the page, and every event dispatched
+        // during rendering, including core.footer.end itself. Everything is
+        // complete by the time this runs, and it still precedes renderDebugBar()
+        // below, which is what serialises the collectors.
+        if (null !== self::$eventSpy) {
+            $logger->recordEvents(self::$eventSpy->records(), self::$eventSpy->dropped());
+            self::$eventSpy->uninstall(self::preload());
+            self::$eventSpy = null;
+        }
+
+        if (null !== self::$templateResource) {
+            $logger->recordTemplates(self::$templateResource->records(), self::$templateResource->dropped());
+            // Cleared so a persistent SAPI cannot carry one request's templates,
+            // drop count and theme attribution into the next.
+            self::$templateResource = null;
+        }
+
         $logger->stopTime('XOOPS');
         $logger->renderDebugBar();
     }
@@ -337,9 +429,21 @@ class DebugbarCorePreload extends XoopsPreloadItem
         return $logger;
     }
 
+    /** The live XoopsPreload singleton whose event table the spy stands in for. */
+    private static function preload(): \XoopsPreload
+    {
+        return \XoopsPreload::getInstance();
+    }
+
+    /** True when a boolean module preference is present and switched on. */
+    private static function configEnabled(string $key): bool
+    {
+        $config = self::getModuleConfig();
+
+        return is_array($config) && isset($config[$key]) && (bool) $config[$key];
+    }
+
     /**
-     * Helper: get the debugbar module configuration.
-     *
      * @return array<string, mixed>|false
      */
     private static function getModuleConfig(): array|false

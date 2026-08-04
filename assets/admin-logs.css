@@ -1,3 +1,68 @@
+/* "Back to Logs" reads as a link but is the page's primary control, so it gets
+   button affordance. Styled here rather than inline so it can carry hover and
+   keyboard focus states, which a bare link and an inline style attribute both
+   lack.
+
+   Deliberately literal colours, not var(--bs-*): the XOOPS admin themes define
+   none of those custom properties, so every var() here resolved to its fallback
+   and only looked theme-aware. A prefers-color-scheme block does the job the
+   variables were supposed to do. !important on the background because admin
+   themes commonly reset anchor backgrounds with a more specific selector. */
+.debugbar-log-back {
+    background-color: #eee !important;
+    border: 1px solid #bbb;
+    border-radius: .35rem;
+    color: #333 !important;
+    display: inline-block;
+    font-weight: 700;
+    line-height: 1.2;
+    padding: .4rem .75rem;
+    text-decoration: none;
+}
+
+.debugbar-log-back:hover,
+.debugbar-log-back:focus-visible {
+    background-color: #e2e6ea !important;
+    border-color: #9aa1a9;
+    color: #111 !important;
+    text-decoration: none;
+}
+
+.debugbar-log-back:focus-visible {
+    outline: 2px solid #0d6efd;
+    outline-offset: 2px;
+}
+
+@media (prefers-color-scheme: dark) {
+    .debugbar-log-back {
+        background-color: #2b3138 !important;
+        border-color: #454d56;
+        color: #e6e9ec !important;
+    }
+
+    .debugbar-log-back:hover,
+    .debugbar-log-back:focus-visible {
+        background-color: #353c44 !important;
+        border-color: #5a636d;
+        color: #fff !important;
+    }
+}
+
+/* Caption under the back button: quieter than body text, but not as quiet as
+   the panel meta it replaced — a truncated log reads identically to a short one,
+   so this needs to be noticed. */
+.debugbar-log-tail-note {
+    color: #596574;
+    font-size: .85rem;
+    margin: .4rem 0 .9rem;
+}
+
+@media (prefers-color-scheme: dark) {
+    .debugbar-log-tail-note {
+        color: #aeb6bf;
+    }
+}
+
 .debugbar-log-panel {
     background: var(--bs-body-bg, #fff);
     border: 1px solid var(--bs-border-color, #d8dde3);
@@ -40,7 +105,29 @@
 .debugbar-log-count { background: #59636e; color: #fff; text-transform: none; }
 .debugbar-log-panel-meta { color: #687381; font-size: .82rem; }
 .debugbar-log-table-wrap { overflow-x: auto; }
-.debugbar-log-table { border-collapse: collapse; min-width: 920px; width: 100%; }
+/* Fixed layout, with the widths declared below. Under auto layout the browser
+   shared the leftover width out across every column, which both ignored the
+   max-width on the description and location cells — so long cache paths ran over
+   the column beside them — and left absurd gaps between Time, Level and
+   Description. Fixed layout is what makes the truncation below actually take. */
+.debugbar-log-table { border-collapse: collapse; min-width: 920px; table-layout: fixed; width: 100%; }
+.debugbar-log-table th:nth-child(1), .debugbar-log-table td:nth-child(1) { width: 10rem; }
+.debugbar-log-table th:nth-child(2), .debugbar-log-table td:nth-child(2) { width: 6.5rem; }
+.debugbar-log-table th:nth-child(3), .debugbar-log-table td:nth-child(3) { width: auto; }
+.debugbar-log-table th:nth-child(4), .debugbar-log-table td:nth-child(4) { width: 6rem; }
+.debugbar-log-table th:nth-child(5), .debugbar-log-table td:nth-child(5) { width: 26%; }
+.debugbar-log-table th:nth-child(6), .debugbar-log-table td:nth-child(6) { width: 11rem; }
+
+/* Truncation belongs on this inner block, not on the cell: max-width on a td is
+   only loosely honoured, and an ellipsis needs a real block box to clip. The
+   markup pairs every one of these with a title attribute, so nothing that gets
+   clipped becomes unreadable. */
+.debugbar-log-clip {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
 .debugbar-log-table th,
 .debugbar-log-table td { border-block-end: 1px solid var(--bs-border-color, #e1e5ea); padding: .65rem .75rem; text-align: start; vertical-align: middle; }
 .debugbar-log-table th { background: rgba(90, 105, 120, .06); color: #505b67; font-size: .78rem; font-weight: 700; white-space: nowrap; }
@@ -57,9 +144,19 @@
 .debugbar-log-level--emergency { background: #fbd5d5; color: #9b1c1c; }
 .debugbar-log-level--info,
 .debugbar-log-level--notice { background: #dceeff; color: #1e5794; }
-.debugbar-log-description { max-width: 44rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The message and its repeat-count badge belong on one line. The clip span is a
+   block, which pushed the badge onto a second row, so the cell becomes a flex
+   row: the message shrinks and ellipsises, the badge keeps its width.
+   min-width: 0 is the part that matters — without it a flex item refuses to
+   shrink below its content and the ellipsis never appears. */
+.debugbar-log-description { align-items: baseline; display: flex; gap: .3rem; overflow: hidden; }
+/* 0 1 auto, not 1 1 auto: the message should take only the width it needs so the
+   badge sits right after it, rather than growing to fill the column and pushing
+   the badge to the far edge where it reads as unrelated. It still shrinks. */
+.debugbar-log-description .debugbar-log-clip { flex: 0 1 auto; min-width: 0; }
+.debugbar-log-description .debugbar-log-error { flex: 0 0 auto; }
 .debugbar-log-channel { color: #55616e; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .82rem; }
-.debugbar-log-location { color: #596574; font: .78rem/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; max-width: 22rem; white-space: nowrap; }
+.debugbar-log-location { color: #596574; font: .78rem/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; overflow: hidden; }
 .debugbar-log-error { color: #a4262c; display: inline; font-size: .78rem; }
 .debugbar-log-details { position: relative; }
 .debugbar-log-details summary { color: #27689d; cursor: pointer; font-size: .82rem; font-weight: 700; list-style: none; white-space: nowrap; }
@@ -79,6 +176,20 @@
     word-break: break-word;
 }
 .debugbar-log-context { margin-block: .55rem 0; min-width: 36rem; }
+
+/* The raw log is the whole point of its page, so let it use the window instead
+   of sitting in a 28rem box with a screen of emptiness beneath it. Height stays
+   content-driven — a three-line log is still three lines — this only lifts the
+   ceiling to whatever the viewport allows, less the admin chrome above it. The
+   max() floor keeps it usable on a short window, and dvh (with a vh fallback for
+   older engines) accounts for mobile browser toolbars that vh gets wrong.
+   The context block inside a table row keeps its fixed cap: that one is a detail
+   opened in place, and growing it to viewport height would push the rest of the
+   table off screen. */
+.debugbar-log-raw {
+    max-height: max(24rem, calc(100vh - 26rem));
+    max-height: max(24rem, calc(100dvh - 26rem));
+}
 .debugbar-log-raw { margin: .75rem; }
 
 @media (max-width: 760px) {

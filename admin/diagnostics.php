@@ -2,13 +2,35 @@
 
 declare(strict_types=1);
 
+/**
+ * XOOPS DebugBar Module - Admin System Diagnostics
+ *
+ * A read-only snapshot of the XOOPS runtime, themes, diagnostic tools, and
+ * required storage — one page to verify xdebug/opcache/monolog/whoops/ray
+ * availability and writable-directory health.
+ *
+ * @copyright       (c) 2000-2026 XOOPS Project (https://xoops.org)
+ * @license             GNU GPL 2 (https://www.gnu.org/licenses/gpl-2.0.html)
+ * @package             debugbar
+ */
+
+use Xmf\Module\Admin;
+use XoopsModules\Debugbar\Admin\AccessPolicy;
 use XoopsModules\Debugbar\Analysis\SystemDiagnostics;
 
 require_once __DIR__ . '/admin_header.php';
 
-$adminObject = \Xmf\Module\Admin::getInstance();
-
 xoops_cp_header();
+
+if (! AccessPolicy::isAllowed()) {
+    echo '<p style="color:#a00;font-weight:bold;">' . htmlspecialchars(_AM_DEBUGBAR_DIAG_FORBIDDEN, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</p>';
+    require_once __DIR__ . '/admin_footer.php';
+
+    return;
+}
+
+/** @var Admin $adminObject */
+$adminObject = Admin::getInstance();
 $adminObject->displayNavigation(basename(__FILE__));
 
 $esc = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -34,8 +56,11 @@ $labels = [
     'xoops_version' => _AM_DEBUGBAR_DIAG_XOOPS_VERSION,
     'php_version' => _AM_DEBUGBAR_PHP_VERSION,
     'xoops_debug' => _AM_DEBUGBAR_XOOPS_DEBUG,
+    'debug_file' => _AM_DEBUGBAR_DIAG_DEBUG_FILE,
     'environment' => _AM_DEBUGBAR_DIAG_ENVIRONMENT,
     'timezone' => _AM_DEBUGBAR_DIAG_TIMEZONE,
+    'error_handler' => _AM_DEBUGBAR_DIAG_ERROR_HANDLER,
+    'sql_mode' => _AM_DEBUGBAR_DIAG_SQL_MODE,
     'front_theme' => _AM_DEBUGBAR_DIAG_FRONT_THEME,
     'admin_theme' => _AM_DEBUGBAR_DIAG_ADMIN_THEME,
     'xdebug' => _AM_DEBUGBAR_DIAG_XDEBUG,
@@ -45,7 +70,7 @@ $labels = [
     'whoops' => _AM_DEBUGBAR_DIAG_WHOOPS,
     'ray' => _AM_DEBUGBAR_RAY,
     'tracy' => _AM_DEBUGBAR_DIAG_TRACY,
-    'explain_secret' => _AM_DEBUGBAR_DIAG_EXPLAIN_SECRET,
+    'explain_stash' => _AM_DEBUGBAR_DIAG_EXPLAIN_STASH,
     'logs' => _AM_DEBUGBAR_DIAG_LOG_DIR,
     'caches' => _AM_DEBUGBAR_DIAG_CACHE_DIR,
     'data' => _AM_DEBUGBAR_DIAG_DATA_DIR,
