@@ -267,7 +267,6 @@ final class SystemDiagnostics
         return $handler instanceof \Closure ? 'Closure' : '';
     }
 
-    /** @return array{id: string, value: string, status: string, detail: string} */
     /**
      * What xoops_data/data/debug.php is doing this request -- including failing.
      *
@@ -310,6 +309,7 @@ final class SystemDiagnostics
         );
     }
 
+    /** @return array{id: string, value: string, status: string, detail: string} */
     private function tracyBootstrapRow(): array
     {
         if (! defined('XOOPS_TRACY_STATUS')) {
