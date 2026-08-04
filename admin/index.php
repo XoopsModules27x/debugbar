@@ -199,7 +199,11 @@ $rayInstalled = \function_exists('ray')
     || \class_exists('Spatie\\GlobalRay\\GlobalRay');
 $rayActivated = $rayInstalled && (bool) $helper->getConfig('ray_enable', 0);
 $debugMode = (int) ($GLOBALS['xoopsConfig']['debug_mode'] ?? 0);
-$xoopsDebugEnabled = in_array($debugMode, [1, 2], true);
+// One rule, shared with AccessPolicy::evaluate(): any non-zero debug_mode means
+// debugging is on. Reading 1|2 here made debug_mode 3 (Smarty debug) render a
+// toolbar while this page reported XOOPS Debug disabled -- the split-brain the
+// policy class exists to prevent, surviving in the page that reports the state.
+$xoopsDebugEnabled = 0 !== $debugMode;
 $debugbarPreferenceEnabled = (bool) $helper->getConfig('debugbar_enable', 1);
 
 // Second activation source. Read through AccessPolicy rather than xoops_getDebugConfig()

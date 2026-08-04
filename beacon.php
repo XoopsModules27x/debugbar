@@ -64,7 +64,12 @@ if (!is_array($payload)) {
 }
 
 $token = isset($payload['token']) && is_string($payload['token']) ? $payload['token'] : '';
-if (!$GLOBALS['xoopsSecurity']->check(true, $token, 'DEBUGBAR_RUM')) {
+// Fail closed rather than fatal. A missing $xoopsSecurity would otherwise throw
+// from an endpoint documented as never rendering, printing an error into a
+// sendBeacon response. Same guard the admin toggles already carry.
+if (! isset($GLOBALS['xoopsSecurity'])
+    || ! $GLOBALS['xoopsSecurity'] instanceof \XoopsSecurity
+    || ! $GLOBALS['xoopsSecurity']->check(true, $token, 'DEBUGBAR_RUM')) {
     debugbar_beacon_exit(403);
 }
 

@@ -251,7 +251,12 @@ namespace {
 
     class XoopsSecurity
     {
-        public function check(bool $clearIfValid = true, bool $token = false, string $name = 'XOOPS_TOKEN'): bool {}
+        /**
+         * Core declares $token untyped with a `false` default, and every caller
+         * in this module passes a token string. Typing it `bool` here made the
+         * stub disagree with real usage.
+         */
+        public function check(bool $clearIfValid = true, string|bool $token = false, string $name = 'XOOPS_TOKEN'): bool {}
 
         public function getTokenHTML(string $name = 'XOOPS_TOKEN'): string {}
 

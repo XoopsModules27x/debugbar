@@ -65,7 +65,11 @@ if (!$buttonEnabled) {
 }
 
 $token = \Xmf\Request::getString('token', '', 'POST');
-if (!$GLOBALS['xoopsSecurity']->check(true, $token, 'DEBUGBAR_XDEBUG')) {
+// Fail closed rather than fatal, for the same reason as beacon.php: a hard-gated
+// endpoint that never renders must not throw its way into a response body.
+if (! isset($GLOBALS['xoopsSecurity'])
+    || ! $GLOBALS['xoopsSecurity'] instanceof \XoopsSecurity
+    || ! $GLOBALS['xoopsSecurity']->check(true, $token, 'DEBUGBAR_XDEBUG')) {
     debugbar_arm_exit(403);
 }
 
