@@ -6,6 +6,7 @@ namespace XoopsModules\Debugbar\Tests\Unit\Analysis;
 
 use PHPUnit\Framework\TestCase;
 use XoopsModules\Debugbar\Analysis\QueryFingerprinter;
+use XoopsModules\Debugbar\Analysis\SqlRedactor;
 
 if (! defined('XOOPS_ROOT_PATH')) {
     define('XOOPS_ROOT_PATH', dirname(__DIR__, 3));
@@ -104,6 +105,24 @@ final class QueryFingerprinterTest extends TestCase
      * fingerprint. The previous version of this test used 40 backslashes, far
      * below the real threshold, so it passed against the unguarded code.
      */
+    /**
+     * fingerprint() delegates to SqlRedactor so the two cannot diverge. Pin the
+     * delegation itself: reverting to a private copy of the patterns left every
+     * other test in this file green, because they only exercise inputs both
+     * implementations agree on.
+     */
+    public function testFingerprintRefusesExactlyWhereTheRedactorRefuses(): void
+    {
+        foreach ([
+            "SELECT a FROM t /* user's */ WHERE id = 1",
+            "SELECT `O'Brien` FROM t WHERE p = 'x'",
+            "SELECT * FROM t WHERE a = 'unterminated",
+        ] as $sql) {
+            self::assertSame(SqlRedactor::REDACTION_FAILED, SqlRedactor::redact($sql), $sql);
+            self::assertSame(QueryFingerprinter::FINGERPRINT_FAILED, QueryFingerprinter::fingerprint($sql), $sql);
+        }
+    }
+
     public function testAnOverlongStatementFailsVisiblyRatherThanSilently(): void
     {
         $sql = "SELECT * FROM t WHERE note = '" . str_repeat('a', 16000) . "' AND uid = 7";

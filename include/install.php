@@ -213,6 +213,9 @@ function _debugbar_add_request_index(): bool
 function _debugbar_rename_button_config(): bool
 {
     $db = $GLOBALS['xoopsDB'];
+    // Narrowed for static analysis: xoops_getHandler() is documented as
+    // returning XoopsObjectHandler, which does not declare getByDirname().
+    /** @var \XoopsModuleHandler $moduleHandler */
     $moduleHandler = xoops_getHandler('module');
     $module = $moduleHandler->getByDirname('debugbar');
     if (! $module instanceof \XoopsModule) {

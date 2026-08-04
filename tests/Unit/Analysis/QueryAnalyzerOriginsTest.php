@@ -98,6 +98,62 @@ final class QueryAnalyzerOriginsTest extends TestCase
         }
     }
 
+    /**
+     * Every refused fingerprint returns the same constant. Counting that as a
+     * shape key merged unrelated statements into one group and reported it as
+     * an N+1 — three different statements carrying a quote-bearing comment
+     * became a single finding with six executions across three variants.
+     */
+    public function testUnfingerprintableStatementsDoNotMergeIntoOneShape(): void
+    {
+        $rows = [];
+        foreach ([
+            "SELECT a FROM alpha /* user's */ WHERE id = 1",
+            "SELECT b FROM beta /* user's */ WHERE id = 2",
+            "UPDATE gamma SET x = 3 /* user's */",
+        ] as $sql) {
+            $rows = array_merge($rows, $this->queries($sql, 2, '/x.php:1'));
+        }
+
+        $result = QueryAnalyzer::analyze($rows, 0.05, 2);
+
+        self::assertSame([], $result['similar_shapes'], 'refusals must not be grouped as a shape');
+    }
+
+    /**
+     * Profiler::explainSlowQueries() reads these rebuilt rows rather than the
+     * logger's, so dropping the flag here left the automatic EXPLAIN path
+     * running against statements cut at QUERY_SQL_CAP.
+     */
+    public function testTheTruncationFlagSurvivesIntoTheSlowQueryList(): void
+    {
+        $rows = [
+            ['sql' => 'SELECT ' . str_repeat('x', 40), 'ms' => 100.0, 'error' => false, 'origin' => '', 'sql_truncated' => true],
+            ['sql' => 'SELECT y FROM t', 'ms' => 100.0, 'error' => false, 'origin' => ''],
+        ];
+
+        $result = QueryAnalyzer::analyze($rows, 0.05, 2);
+
+        self::assertCount(2, $result['slow']);
+        self::assertTrue($result['slow'][0]['sql_truncated']);
+        self::assertFalse($result['slow'][1]['sql_truncated']);
+    }
+
+    /**
+     * exactKey() returns a fixed-size digest rather than the whole statement,
+     * while still collapsing whitespace and case the way the raw form did.
+     */
+    public function testExactKeyIsAFixedSizeDigestThatStillNormalises(): void
+    {
+        $a = QueryAnalyzer::exactKey('SELECT  A  FROM t WHERE id = 1');
+        $b = QueryAnalyzer::exactKey('select a from t where id=1');
+        $c = QueryAnalyzer::exactKey('SELECT a FROM t WHERE id = 2');
+
+        self::assertSame($a, $b, 'whitespace and case must still normalise');
+        self::assertNotSame($a, $c);
+        self::assertSame(32, strlen($a), 'must be a fixed-size digest, not the statement');
+    }
+
     public function testQueriesWithoutAnOriginStillAnalyseCleanly(): void
     {
         // Origin is absent for anything recorded past the query-log cap, and for

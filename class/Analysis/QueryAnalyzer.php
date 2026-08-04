@@ -43,7 +43,7 @@ final class QueryAnalyzer
      *     duplicates: list<array{sql: string, count: int, origins: list<string>}>,
      *     n_plus_one: list<array{sql: string, count: int, origins: list<string>}>,
      *     similar_shapes: list<array{sql: string, count: int, variants: int, origins: list<string>}>,
-     *     slow: list<array{sql: string, ms: float}>
+     *     slow: list<array{sql: string, ms: float, sql_truncated: bool}>
      * }
      */
     public static function analyze(array $queries, float $slowThreshold, int $repeatThreshold = 5): array
@@ -87,11 +87,18 @@ final class QueryAnalyzer
             }
 
             $shapeKey = QueryFingerprinter::fingerprint($sql);
-            $shapeCounts[$shapeKey] = ($shapeCounts[$shapeKey] ?? 0) + 1;
-            $shapeSamples[$shapeKey] = $sql;
-            $shapeVariants[$shapeKey][$exactKey] = true;
-            if ('' !== $origin) {
-                $shapeOrigins[$shapeKey][$origin] = ($shapeOrigins[$shapeKey][$origin] ?? 0) + 1;
+            // A refused fingerprint is not a shape. Every refusal returns the
+            // same constant, so counting them as one key merged unrelated
+            // statements into a single group and reported it as an N+1: three
+            // different statements carrying a quote-bearing comment became one
+            // finding with six executions across three variants.
+            if (QueryFingerprinter::FINGERPRINT_FAILED !== $shapeKey) {
+                $shapeCounts[$shapeKey] = ($shapeCounts[$shapeKey] ?? 0) + 1;
+                $shapeSamples[$shapeKey] = $sql;
+                $shapeVariants[$shapeKey][$exactKey] = true;
+                if ('' !== $origin) {
+                    $shapeOrigins[$shapeKey][$origin] = ($shapeOrigins[$shapeKey][$origin] ?? 0) + 1;
+                }
             }
 
             if (self::hasError($query['error'] ?? null)) {
@@ -102,7 +109,16 @@ final class QueryAnalyzer
                 $slowestSql = $sql;
             }
             if ($ms >= $slowThreshold * 1000.0) {
-                $slow[] = ['sql' => $sql, 'ms' => $ms];
+                // Carry the truncation flag through: Profiler::explainSlowQueries()
+                // reads these rebuilt entries, not the logger's, so dropping it
+                // here left the automatic EXPLAIN path still running against
+                // statements cut at QUERY_SQL_CAP while the stash path skipped
+                // them correctly.
+                $slow[] = [
+                    'sql' => $sql,
+                    'ms' => $ms,
+                    'sql_truncated' => true === ($query['sql_truncated'] ?? false),
+                ];
             }
         }
 

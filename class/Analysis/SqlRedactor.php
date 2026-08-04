@@ -13,17 +13,26 @@ namespace XoopsModules\Debugbar\Analysis;
  * EXPLAINs to a representative plan — index usage and scan type are unchanged,
  * only value-dependent row estimates shift.
  *
- * SCOPE, stated honestly: this is a regex over SQL, not a SQL parser, so it
- * removes literals in well-formed statements written the way XOOPS writes
- * them. It does NOT understand:
- *   - `backtick` identifiers containing a quote character;
- *   - -- line and slash-star block comments containing a quote character;
- *   - servers running with NO_BACKSLASH_ESCAPES, where a trailing backslash
- *     inside a literal is data rather than an escape;
- *   - unterminated literals, which a failed query can still carry.
- * In each of those a following literal can survive. Treat the output as
- * "values stripped on the common path", not as a guarantee that no secret can
- * ever appear. Closing those cases needs a tokenizer; see docs/file-list.md.
+ * SCOPE: this is a regex over SQL, not a SQL parser, so it cannot model
+ * every statement. It does NOT understand `backtick` identifiers containing a
+ * quote character, -- line or slash-star block comments containing one,
+ * servers running with NO_BACKSLASH_ESCAPES (where a trailing backslash inside
+ * a literal is data, not an escape), or unterminated literals carried by a
+ * failed query. In each of those a following literal could otherwise survive.
+ *
+ * Rather than leaving those as silent gaps, the scan verifies its own work and
+ * REFUSES when it cannot account for the statement — see scanLiterals(). A
+ * tokenizer would let those statements be redacted instead of refused; until
+ * then they degrade to no EXPLAIN rather than to a leak.
+ *
+ * READ THE GUARANTEE NARROWLY: "every LITERAL was removed, or nothing is
+ * returned". It is not "no sensitive text survives". Comments, identifiers and
+ * variable names are not literals, so
+ *     SELECT * FROM t /* password=hunter2 *​/ WHERE id = 7
+ * passes the check — there is no quote to betray it — and the comment is
+ * returned verbatim. The same holds for `token_abc123` as a backtick
+ * identifier or @password_abc as a user variable. Anything that puts a value
+ * outside a literal is outside what this class removes.
  *
  * @category  Module
  * @package   debugbar
@@ -76,8 +85,15 @@ final class SqlRedactor
      * the exponent clause does the same job for 6.022e23, which otherwise
      * reduced to 0e23. Shared with QueryFingerprinter for the same reason as
      * the string pattern.
+     *
+     * The final branch covers MySQL's leading-dot form (`.5`), which the
+     * lookbehind would otherwise reject: that lookbehind exists to protect
+     * qualified names like `tbl_2.x`, and it was also refusing every decimal
+     * written without a leading zero, so `.534543524554` survived intact. The
+     * branch starts AT the dot, so the lookbehind then examines the character
+     * before it — still blocking `a.5` while allowing `= .5`.
      */
-    public const NUMERIC_LITERAL_PATTERN = '/(?<![A-Za-z0-9_`.])(?:0[xX][0-9a-fA-F]+|0[bB][01]+|\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/';
+    public const NUMERIC_LITERAL_PATTERN = '/(?<![A-Za-z0-9_`.])(?:0[xX][0-9a-fA-F]+|0[bB][01]+|\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|\.\d+(?:[eE][+-]?\d+)?)/';
 
     /**
      * Statements longer than this are refused rather than scanned.
@@ -99,26 +115,56 @@ final class SqlRedactor
      * @param string $sql raw SQL statement
      *
      * @return string the statement with literals replaced, or REDACTION_FAILED
-     *                when it is too long to scan or a pass could not complete
+     *                when it is too long to scan, a pass could not complete, or
+     *                the scan could not account for every quote character
      */
     public static function redact(string $sql): string
     {
-        if (strlen($sql) > self::MAX_INPUT_LENGTH) {
-            return self::REDACTION_FAILED;
-        }
-
-        // String literals (single- and double-quoted, backslash escapes) -> ''
-        $out = preg_replace(self::STRING_LITERAL_PATTERN, "''", $sql);
-        if (null === $out) {
+        $scanned = self::scanLiterals($sql);
+        if (null === $scanned) {
             return self::REDACTION_FAILED;
         }
 
         // Numeric literals -> 0
-        $out = preg_replace(self::NUMERIC_LITERAL_PATTERN, '0', $out);
-        if (null === $out) {
-            return self::REDACTION_FAILED;
+        $out = preg_replace(self::NUMERIC_LITERAL_PATTERN, '0', str_replace(self::SENTINEL, "''", $scanned));
+
+        return null === $out ? self::REDACTION_FAILED : $out;
+    }
+
+    /**
+     * Replace every string literal with SENTINEL, or return null when the scan
+     * cannot be trusted.
+     *
+     * The trust check is the important part, and it is exact rather than a list
+     * of suspicious constructs: a statement whose literals have all been
+     * accounted for has no quote character left once they are removed. If one
+     * survives, the scan did not model the statement — the quote is inside a
+     * `backtick` identifier or a comment the pattern cannot see, the literal was
+     * never terminated, or the server treats backslashes as data
+     * (NO_BACKSLASH_ESCAPES) and a literal ended earlier than assumed. Each of
+     * those is a case where a LATER literal can survive unredacted, so all of
+     * them must fail closed. This is what makes the cases named in the class
+     * docblock refusals rather than silent leaks.
+     */
+    private static function scanLiterals(string $sql): ?string
+    {
+        if (strlen($sql) > self::MAX_INPUT_LENGTH || str_contains($sql, self::SENTINEL)) {
+            return null;
         }
 
-        return $out;
+        $out = preg_replace(self::STRING_LITERAL_PATTERN, self::SENTINEL, $sql);
+        if (null === $out) {
+            return null;
+        }
+
+        return (str_contains($out, "'") || str_contains($out, '"')) ? null : $out;
     }
+
+    /**
+     * Stand-in for a matched literal while the scan is checked.
+     *
+     * Deliberately quote-free, so any quote remaining afterwards is proof that
+     * the scan missed something rather than an artefact of the replacement.
+     */
+    private const SENTINEL = "\x01";
 }

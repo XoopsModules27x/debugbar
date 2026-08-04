@@ -138,7 +138,25 @@ final class SqlRedactorTest extends TestCase
             'hexadecimal' => ['SELECT * FROM t WHERE tok = 0x534543524554', '534543524554'],
             'binary' => ['SELECT * FROM t WHERE b = 0b101010111100', '101010111100'],
             'scientific' => ['SELECT * FROM t WHERE n = 6.022e23', 'e23'],
+            // MySQL accepts a decimal written without a leading zero. The
+            // lookbehind that protects qualified names such as tbl_2.x was also
+            // refusing this form, so the value survived untouched.
+            'leading-dot decimal' => ['SELECT * FROM t WHERE ratio = .534543524554', '534543524554'],
+            'leading-dot with exponent' => ['SELECT * FROM t WHERE r = .5e10', '5e10'],
         ];
+    }
+
+    /**
+     * The lookbehind must keep doing its original job: a qualified name is not
+     * a literal and must survive.
+     */
+    public function testQualifiedIdentifiersAreNotMistakenForDecimals(): void
+    {
+        $out = SqlRedactor::redact('SELECT tbl_2.x, a.b FROM t WHERE id = 5');
+
+        self::assertStringContainsString('tbl_2.x', $out);
+        self::assertStringContainsString('a.b', $out);
+        self::assertStringContainsString('id = 0', $out);
     }
 
     /**
@@ -173,6 +191,74 @@ final class SqlRedactorTest extends TestCase
         $overLimit = $atLimit . 'a';
         self::assertSame(SqlRedactor::MAX_INPUT_LENGTH + 1, strlen($overLimit));
         self::assertSame(SqlRedactor::REDACTION_FAILED, SqlRedactor::redact($overLimit));
+    }
+
+    /**
+     * A regex cannot model comments, backtick identifiers, NO_BACKSLASH_ESCAPES
+     * or unterminated literals — in each, a later literal could survive. The
+     * scan checks its own work instead: once literals are removed, no quote
+     * character may remain, so these refuse rather than emit a partial result.
+     *
+     * @param string $sql    a statement the pattern cannot account for
+     * @param string $secret the value that must never appear in any output
+     */
+    #[DataProvider('ambiguousStatements')]
+    public function testStatementsTheScanCannotAccountForAreRefused(string $sql, string $secret): void
+    {
+        $out = SqlRedactor::redact($sql);
+
+        self::assertSame(SqlRedactor::REDACTION_FAILED, $out);
+        self::assertStringNotContainsString($secret, $out);
+    }
+
+    /** @return array<string, array{0: string, 1: string}> */
+    public static function ambiguousStatements(): array
+    {
+        return [
+            'line comment containing an apostrophe' => [
+                "-- user's filter\nSELECT * FROM t WHERE password = 's3cr3t'",
+                's3cr3t',
+            ],
+            'block comment containing an apostrophe' => [
+                "/* user's filter */ SELECT * FROM t WHERE password = 's3cr3t'",
+                's3cr3t',
+            ],
+            'backtick identifier containing an apostrophe' => [
+                "SELECT `O'Brien` FROM t WHERE password = 's3cr3t'",
+                's3cr3t',
+            ],
+            'trailing backslash under NO_BACKSLASH_ESCAPES' => [
+                "SELECT 'public\\', 's3cr3t'",
+                's3cr3t',
+            ],
+            'unterminated literal from a failed query' => [
+                "SELECT * FROM t WHERE a = 's3cr3t",
+                's3cr3t',
+            ],
+        ];
+    }
+
+    /**
+     * The refusal must be narrow. Backtick identifiers, doubled quotes, IN
+     * lists and the quote-free numeric forms are all ordinary and must still be
+     * redacted rather than refused.
+     */
+    #[DataProvider('ordinaryStatements')]
+    public function testOrdinaryStatementsAreRedactedNotRefused(string $sql): void
+    {
+        self::assertNotSame(SqlRedactor::REDACTION_FAILED, SqlRedactor::redact($sql));
+    }
+
+    /** @return array<string, array{0: string}> */
+    public static function ordinaryStatements(): array
+    {
+        return [
+            'plain literals' => ["SELECT * FROM users WHERE uname = 'admin' AND uid = 42"],
+            'backtick identifiers' => ['SELECT `uname` FROM `xc71_users` WHERE `uid` = 7'],
+            'doubled quote and a double-quoted value' => ['SELECT * FROM t WHERE a = \'O\'\'Reilly\' AND b = "x"'],
+            'IN list' => ['SELECT * FROM t WHERE id IN (1, 2, 3)'],
+            'hex and exponent' => ["UPDATE t SET a = 'x' WHERE b = 0x1F AND c = 6.022e23"],
+        ];
     }
 
     /**

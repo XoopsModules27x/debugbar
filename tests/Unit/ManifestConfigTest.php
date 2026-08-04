@@ -129,4 +129,23 @@ final class ManifestConfigTest extends TestCase
         self::assertContains('collect_events', $names);
         self::assertContains('collect_templates', $names);
     }
+
+    /**
+     * The block parser ends each declaration at the first `];`. Some entries
+     * (editor_link, monolog_level) carry a nested `options` array, so a name
+     * resolved without its formtype would mean the parser truncated the block
+     * early — and the exemption above would then silently misclassify entries.
+     * Assert every parsed preference kept its formtype rather than assuming it.
+     */
+    public function testEveryParsedPreferenceKeepsItsFormtype(): void
+    {
+        $missing = [];
+        foreach ($this->declaredPreferences() as $preference) {
+            if ('' === $preference['formtype']) {
+                $missing[] = $preference['name'];
+            }
+        }
+
+        self::assertSame([], $missing, 'parser truncated these blocks: ' . implode(', ', $missing));
+    }
 }

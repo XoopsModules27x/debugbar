@@ -43,24 +43,18 @@ final class QueryFingerprinter
      */
     public static function fingerprint(string $sql): string
     {
-        $sql = trim($sql);
-        if (strlen($sql) > SqlRedactor::MAX_INPUT_LENGTH) {
+        // Delegated so the two cannot diverge: this fingerprint is stored in
+        // debugbar_profiles.slowest_fp, so a literal that survives the scan is
+        // persisted for the whole retention window — the same exposure the
+        // redactor guards, and it must refuse in exactly the same cases.
+        $redacted = SqlRedactor::redact(trim($sql));
+        if (SqlRedactor::REDACTION_FAILED === $redacted) {
             return self::FINGERPRINT_FAILED;
         }
 
-        // String and numeric literals. Shares SqlRedactor's patterns
-        // deliberately: this fingerprint is stored in
-        // debugbar_profiles.slowest_fp, so a literal that survives the scan is
-        // persisted for the whole retention window. See those constants for why
-        // one alternation pass is required and why hex/binary/exponent forms
-        // are matched explicitly.
-        foreach ([SqlRedactor::STRING_LITERAL_PATTERN, SqlRedactor::NUMERIC_LITERAL_PATTERN] as $pattern) {
-            $replaced = preg_replace($pattern, '?', $sql);
-            if (null === $replaced) {
-                return self::FINGERPRINT_FAILED;
-            }
-            $sql = $replaced;
-        }
+        // The redactor leaves '' and 0; a fingerprint wants one marker each.
+        $sql = str_replace("''", '?', $redacted);
+        $sql = (string) preg_replace('/(?<![A-Za-z0-9_`.])0(?![A-Za-z0-9_])/', '?', $sql);
 
         // Collapse IN lists of placeholders to a single marker
         $sql = (string) preg_replace('/\bIN\s*\(\s*\?(?:\s*,\s*\?)*\s*\)/i', 'IN (?+)', $sql);
