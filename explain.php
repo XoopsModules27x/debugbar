@@ -72,7 +72,9 @@ if (! \XoopsModules\Debugbar\Admin\AccessPolicy::isRuntimeAllowed()) {
 
 $token = \Xmf\Request::getString('token', '', 'POST');
 // Reusable (not single-use): one page load may EXPLAIN several rows.
-if (! isset($GLOBALS['xoopsSecurity']) || ! $GLOBALS['xoopsSecurity']->check(false, $token, 'DEBUGBAR_EXPLAIN')) {
+if (! isset($GLOBALS['xoopsSecurity'])
+    || ! $GLOBALS['xoopsSecurity'] instanceof \XoopsSecurity
+    || ! $GLOBALS['xoopsSecurity']->check(false, $token, 'DEBUGBAR_EXPLAIN')) {
     debugbar_explain_fail('Invalid security token', 403);
 }
 
