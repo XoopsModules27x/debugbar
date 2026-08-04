@@ -67,18 +67,23 @@ final class EndpointGatesTest extends TestCase
 
     /**
      * Every endpoint that calls the security handler must first prove it has
-     * one. isset() alone is not enough: a global that exists but is not an
-     * XoopsSecurity still reaches ->check() and fatals, which prints an error
-     * into a response body these endpoints promise never to render into.
+     * one, and must silence the logger the same way. isset() alone is not
+     * enough for the first: a global that exists but is not an XoopsSecurity
+     * still reaches ->check() and fatals, which prints an error into a response
+     * body these endpoints promise never to render into.
      *
-     * This is pinned rather than merely fixed because the omission has now
-     * happened twice -- beacon.php and xdebug-arm.php were bare, and explain.php
-     * kept only half the guard after they were repaired. Each time it was found
-     * by reading the file that happened to be open. Discovering the files by
-     * scanning the module root, rather than listing them here, is the point: a
-     * fourth endpoint added later is covered the day it is written.
+     * On the logger: activated is the flag that decides it, because
+     * XoopsLogger::render() returns the output untouched when it is false.
+     * renderingEnabled is asserted alongside it not because either alone would
+     * leak, but because divergence between these three files is what keeps
+     * costing review time -- the access gate, the security guard and now this
+     * were each implemented in two of the three and questioned in the third.
+     *
+     * Discovering the files by scanning the module root, rather than listing
+     * them here, is the point: a fourth endpoint added later is covered the day
+     * it is written.
      */
-    public function testEveryEndpointProvesItHasASecurityHandlerBeforeUsingIt(): void
+    public function testEveryEndpointGuardsItsGlobalsAndSilencesTheLogger(): void
     {
         $root = dirname(__DIR__, 2);
         $entryScripts = glob($root . '/*.php');
@@ -104,6 +109,16 @@ final class EndpointGatesTest extends TestCase
                 "! \$GLOBALS['xoopsSecurity'] instanceof \\XoopsSecurity",
                 $source,
                 $name . ' must reject a security handler of the wrong type'
+            );
+            self::assertStringContainsString(
+                "\$GLOBALS['xoopsLogger']->activated = false",
+                $source,
+                $name . ' must switch the logger off -- activated is what render() checks'
+            );
+            self::assertStringContainsString(
+                "\$GLOBALS['xoopsLogger']->renderingEnabled = false",
+                $source,
+                $name . ' must clear renderingEnabled too, so all endpoints match'
             );
         }
 

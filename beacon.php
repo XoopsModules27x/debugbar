@@ -22,8 +22,13 @@ use XoopsModules\Debugbar\ProfileRepository;
 
 require_once dirname(__DIR__, 2) . '/mainfile.php';
 
-// Never let the debug logger append its panel to a beacon response
+// Never let the debug logger append its panel to a beacon response.
+// activated is the flag that matters -- XoopsLogger::render() returns the
+// output untouched when it is false -- but renderingEnabled is cleared too, so
+// all three endpoints suppress the logger identically and a later
+// enableRendering() cannot register a second callback on this request.
 if (isset($GLOBALS['xoopsLogger']) && $GLOBALS['xoopsLogger'] instanceof \XoopsLogger) {
+    $GLOBALS['xoopsLogger']->renderingEnabled = false;
     $GLOBALS['xoopsLogger']->activated = false;
 }
 
