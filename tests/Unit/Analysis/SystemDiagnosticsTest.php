@@ -155,7 +155,7 @@ final class SystemDiagnosticsTest extends TestCase
         self::assertSame('info', $row['status']);
     }
 
-    public function testExplainStashRowReportsReadyWithQueryCount(): void
+    public function testExplainStashRowReportsReadyWithStashFileCount(): void
     {
         $stashDir = $this->var . '/caches/debugbar_explain';
         self::assertTrue(mkdir($stashDir, 0777, true));
@@ -169,7 +169,9 @@ final class SystemDiagnosticsTest extends TestCase
         self::assertNotNull($row);
         self::assertSame('Ready', $row['value']);
         self::assertSame('ok', $row['status']);
-        self::assertSame('2 cached queries', $row['detail']);
+        // One file per REQUEST, each holding however many statements that
+        // request recorded -- so the count is files, not queries.
+        self::assertSame('2 cached stash files', $row['detail']);
     }
 
     public function testExplainStashRowSingularWording(): void
@@ -183,7 +185,7 @@ final class SystemDiagnosticsTest extends TestCase
         $row = $this->findRow($report, 'tools', 'explain_stash');
 
         self::assertNotNull($row);
-        self::assertSame('1 cached query', $row['detail']);
+        self::assertSame('1 cached stash file', $row['detail']);
     }
 
     public function testWritableStorageRowsReflectFilesystemState(): void

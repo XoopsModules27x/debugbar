@@ -264,7 +264,14 @@ final class SystemDiagnostics
             return (is_object($target) ? $target::class : (string) $target) . '::' . (string) $handler[1];
         }
 
-        return $handler instanceof \Closure ? 'Closure' : '';
+        if ($handler instanceof \Closure) {
+            return 'Closure';
+        }
+
+        // An invokable object is a perfectly legal handler and set_error_handler
+        // accepts one. Reporting it as '' made errorHandlerRow() say "PHP
+        // default" for a handler that was very much installed.
+        return is_object($handler) ? $handler::class . '::__invoke' : '';
     }
 
     /**
@@ -378,7 +385,7 @@ final class SystemDiagnostics
             'explain_stash',
             'Ready',
             'ok',
-            sprintf('%d cached %s', $count, $count === 1 ? 'query' : 'queries')
+            sprintf('%d cached %s', $count, $count === 1 ? 'stash file' : 'stash files')
         );
     }
 

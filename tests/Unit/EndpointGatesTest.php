@@ -66,6 +66,58 @@ final class EndpointGatesTest extends TestCase
     }
 
     /**
+     * Every endpoint that calls the security handler must first prove it has
+     * one. isset() alone is not enough: a global that exists but is not an
+     * XoopsSecurity still reaches ->check() and fatals, which prints an error
+     * into a response body these endpoints promise never to render into.
+     *
+     * This is pinned rather than merely fixed because the omission has now
+     * happened twice -- beacon.php and xdebug-arm.php were bare, and explain.php
+     * kept only half the guard after they were repaired. Each time it was found
+     * by reading the file that happened to be open. Discovering the files by
+     * scanning the module root, rather than listing them here, is the point: a
+     * fourth endpoint added later is covered the day it is written.
+     */
+    public function testEveryEndpointProvesItHasASecurityHandlerBeforeUsingIt(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $entryScripts = glob($root . '/*.php');
+        self::assertIsArray($entryScripts);
+
+        $checked = 0;
+        foreach ($entryScripts as $path) {
+            $source = file_get_contents($path);
+            self::assertIsString($source);
+            if (! str_contains($source, "\$GLOBALS['xoopsSecurity']->check(")) {
+                continue;
+            }
+
+            $name = basename($path);
+            $checked++;
+
+            self::assertStringContainsString(
+                "! isset(\$GLOBALS['xoopsSecurity'])",
+                $source,
+                $name . ' must reject a missing security handler'
+            );
+            self::assertStringContainsString(
+                "! \$GLOBALS['xoopsSecurity'] instanceof \\XoopsSecurity",
+                $source,
+                $name . ' must reject a security handler of the wrong type'
+            );
+        }
+
+        // Guard the guard: a refactor that renamed the global or moved the
+        // token checks behind a helper would otherwise leave this test
+        // scanning nothing and passing.
+        self::assertGreaterThanOrEqual(
+            3,
+            $checked,
+            'expected at least beacon.php, explain.php and xdebug-arm.php to check a token'
+        );
+    }
+
+    /**
      * explain.php is the one endpoint that hands a statement to the server, so
      * "starts with SELECT" is not a sufficient description of what it accepts.
      * Neither form below is reachable today — the statement comes from the

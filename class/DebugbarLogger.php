@@ -264,7 +264,12 @@ class DebugbarLogger
                 // who configured that already told the whole stack which editor
                 // they use, and overriding it here would be presumptuous.
                 if ('' === (string) ini_get('xdebug.file_link_format')) {
-                    $editor = 'vscode';
+                    // Matches xoops_version.php's declared default for
+                    // editor_link. The two must agree: this fallback only runs
+                    // when the preference is absent or empty, so a disagreement
+                    // would silently give a fresh install one editor and a
+                    // half-configured one another.
+                    $editor = 'phpstorm';
 
                     try {
                         $configured = (string) (Helper::getInstance()->getConfig('editor_link') ?? '');

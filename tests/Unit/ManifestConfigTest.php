@@ -128,6 +128,15 @@ final class ManifestConfigTest extends TestCase
         self::assertContains('debugbar_enable', $names);
         self::assertContains('collect_events', $names);
         self::assertContains('collect_templates', $names);
+
+        // The two entries carrying a nested `options` array. Naming them keeps
+        // the block parser honest about nesting: the outer declaration ends at
+        // `];` while a nested array ends at `],`, so these parse whole today --
+        // but they are the entries that would break first if either the parser
+        // or the manifest's formatting changed.
+        $byName = array_column($this->declaredPreferences(), 'formtype', 'name');
+        self::assertSame('select', $byName['editor_link'] ?? '');
+        self::assertSame('select', $byName['monolog_level'] ?? '');
     }
 
     /**
