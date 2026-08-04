@@ -66,6 +66,46 @@ final class EndpointGatesTest extends TestCase
     }
 
     /**
+     * explain.php is the one endpoint that hands a statement to the server, so
+     * "starts with SELECT" is not a sufficient description of what it accepts.
+     * Neither form below is reachable today — the statement comes from the
+     * module's own server-side stash and mysqli::query() runs one statement —
+     * but both guards are what stops a future change to WHAT gets stashed from
+     * turning this endpoint into an execution primitive.
+     */
+    public function testExplainAcceptsOnlyASinglePlainSelect(): void
+    {
+        $source = file_get_contents(dirname(__DIR__, 2) . '/explain.php');
+        self::assertIsString($source);
+
+        self::assertStringContainsString(
+            "stripos(\$normalized, 'SELECT')",
+            $source,
+            'explain.php must still require a SELECT prefix'
+        );
+        self::assertStringContainsString(
+            "str_contains(\$normalized, ';')",
+            $source,
+            'explain.php must reject anything carrying a statement separator'
+        );
+        self::assertStringContainsString(
+            'INTO\s+(?:OUT|DUMP)FILE',
+            $source,
+            'explain.php must reject SELECT forms that write to disk'
+        );
+        // Asserted against $normalized, not $sql: the comment-stripping pass is
+        // what makes the prefix check meaningful, and a guard applied to the raw
+        // string would be trivially bypassed by a leading comment.
+        // One assignment plus three guards. Counted, not merely detected, so a
+        // fourth guard added against the raw $sql cannot slip in beside them.
+        self::assertSame(
+            4,
+            substr_count($source, '$normalized'),
+            'every statement-shape guard must run on the comment-stripped form'
+        );
+    }
+
+    /**
      * The admin pages keep the STRICTER gate. They expose site-wide SQL,
      * sessions and configuration accumulated across other people's requests,
      * which is a different exposure from a toolbar showing you your own.

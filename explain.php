@@ -108,6 +108,27 @@ if (0 !== stripos($normalized, 'SELECT')) {
     debugbar_explain_fail('Only SELECT statements can be explained.', 422);
 }
 
+// A SELECT prefix is not the same as "one SELECT and nothing else", and this
+// line is about to hand the statement to the server. Neither form below is
+// reachable today — the statement comes from the module's own server-side
+// stash, not from the request, and mysqli::query() executes only one statement
+// — but both protections are one comparison each, and they stop a future change
+// to what gets stashed from turning this endpoint into an execution primitive.
+//
+// Semicolons are rejected wholesale rather than parsed for: telling a statement
+// separator from a semicolon inside a string literal needs the tokenizer the
+// redactor does not have either. A legitimate query containing one simply does
+// not get an EXPLAIN, which is the safe direction for a diagnostic.
+if (str_contains($normalized, ';')) {
+    debugbar_explain_fail('Only a single statement can be explained.', 422);
+}
+// INTO OUTFILE / DUMPFILE turn a SELECT into a file write. EXPLAIN does not
+// execute the statement, so this is belt-and-braces, but a form whose whole
+// purpose is writing to disk should never reach the server from here.
+if (1 === preg_match('/\bINTO\s+(?:OUT|DUMP)FILE\b/i', $normalized)) {
+    debugbar_explain_fail('Only plain SELECT statements can be explained.', 422);
+}
+
 /** @var XoopsMySQLDatabase $xoopsDB */
 $xoopsDB = $GLOBALS['xoopsDB'];
 

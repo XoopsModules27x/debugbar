@@ -73,7 +73,17 @@ final class XdebugStatus
         }
 
         $canListParse = 'ok' === $state;
-        $canTrigger = $loaded && \in_array('profile', $effectiveModes, true) && 'trigger' === $startWithRequest;
+        // The output directory is part of "can trigger", not a separate concern:
+        // a triggered run writes its cachegrind file there, so with the directory
+        // unconfigured, missing or unreadable the trigger cannot produce anything
+        // to list or parse. Without this term the UI offered an arm button whose
+        // write was guaranteed to fail, and reported nothing afterwards — the
+        // worst shape of failure, because it looks like the profiler ran and
+        // found nothing rather than like it was never able to start.
+        $canTrigger = $loaded
+            && \in_array('profile', $effectiveModes, true)
+            && 'trigger' === $startWithRequest
+            && 'ok' === $state;
 
         $sharedDirWarning = 'ok' === $state
             && rtrim($outputDir, '/\\') === rtrim($sysTempDir, '/\\');
