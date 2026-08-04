@@ -267,7 +267,7 @@ final class ProfileRepository
             . ' FROM %s WHERE created > %u AND lcp_ms IS NOT NULL'
             . ' GROUP BY url_hash ORDER BY avg_lcp DESC LIMIT %u',
             $this->table($db),
-            time() - ($sinceDays * 86400),
+            time() - (max(1, $sinceDays) * 86400),
             max(1, $limit)
         ));
 
@@ -315,7 +315,6 @@ final class ProfileRepository
         }
     }
 
-    /** @return list<array<string, mixed>> */
     /** @return list<array<string, string|null>> */
     private function fetch(string $sql): array
     {

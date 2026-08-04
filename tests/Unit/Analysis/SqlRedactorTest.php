@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace XoopsModules\Debugbar\Tests\Unit\Analysis;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use XoopsModules\Debugbar\Analysis\SqlRedactor;
 
@@ -44,5 +45,146 @@ final class SqlRedactorTest extends TestCase
     {
         $out = SqlRedactor::redact('SELECT * FROM t WHERE token = "s3cr3t-value"');
         self::assertStringNotContainsString('s3cr3t-value', $out);
+    }
+
+    /**
+     * Regression: scanning the two quote styles in separate passes let an
+     * apostrophe inside a double-quoted value swallow the opening quote of a
+     * LATER single-quoted literal, leaving that literal's value in the output
+     * that gets written to the on-disk EXPLAIN stash.
+     */
+    public function testMixedQuoteTypesDoNotLeakSubsequentSecret(): void
+    {
+        $out = SqlRedactor::redact('SELECT * FROM t WHERE name = "O\'Brien" AND token = \'SECRET123\'');
+
+        self::assertStringNotContainsString('SECRET123', $out);
+        self::assertStringNotContainsString('Brien', $out);
+        self::assertSame("SELECT * FROM t WHERE name = '' AND token = ''", $out);
+    }
+
+    public function testApostropheInDoubleQuotedValueDoesNotLeakLaterPassword(): void
+    {
+        $out = SqlRedactor::redact('SELECT uid FROM users WHERE note = "it\'s fine" AND pass = \'hunter2\'');
+
+        self::assertStringNotContainsString('hunter2', $out);
+        self::assertStringNotContainsString('fine', $out);
+    }
+
+    /**
+     * The two-pass scan this replaced could only be caught by a statement that
+     * MIXES quote styles. Cases with one style alone pass under both
+     * implementations, so they document behaviour without pinning the fix —
+     * every case below therefore mixes.
+     */
+    #[DataProvider('mixedQuoteStatements')]
+    public function testMixedQuoteStatementsNeverLeakTheFollowingValue(string $sql, string $secret): void
+    {
+        self::assertStringNotContainsString($secret, SqlRedactor::redact($sql));
+    }
+
+    /**
+     * Each case is verified to FAIL against the previous two-pass
+     * implementation — an apostrophe inside a double-quoted value, positioned
+     * before the value that must not survive. Merely putting both quote styles
+     * in one statement is not enough and yields a test that passes either way.
+     *
+     * @return array<string, array{0: string, 1: string}>
+     */
+    public static function mixedQuoteStatements(): array
+    {
+        return [
+            'double-quoted value holding an apostrophe' => [
+                'SELECT * FROM t WHERE name = "O\'Brien" AND token = \'SECRET123\'',
+                'SECRET123',
+            ],
+            'doubled-quote escape after an apostrophe in a double-quoted value' => [
+                'SELECT * FROM t WHERE note = "it\'s fine" AND a = \'O\'\'Brien\' AND token = \'SECRET456\'',
+                'SECRET456',
+            ],
+            'target is the last of three literals' => [
+                'UPDATE t SET label = "o\'clock", note = \'x\', tok = \'SECRET321\' WHERE id = 1',
+                'SECRET321',
+            ],
+        ];
+    }
+
+    /**
+     * Characterisation, NOT a regression test: a backslash-escaped quote inside
+     * a single-quoted literal was handled correctly by the old two-pass code
+     * too, so this case cannot pin the fix. Kept because the behaviour is worth
+     * stating, labelled so nobody mistakes it for coverage of the bug.
+     */
+    public function testBackslashEscapedQuoteIsTreatedAsPartOfTheLiteral(): void
+    {
+        $out = SqlRedactor::redact('SELECT * FROM t WHERE a = \'O\\\'Brien\' AND token = \'SECRET789\'');
+
+        self::assertStringNotContainsString('SECRET789', $out);
+    }
+
+    /**
+     * A bare \d+ rule consumed only the leading 0 of a hex literal and left the
+     * payload standing, so a hex-encoded value passed through untouched.
+     */
+    #[DataProvider('quoteFreeLiterals')]
+    public function testQuoteFreeNumericLiteralsAreNormalised(string $sql, string $payload): void
+    {
+        self::assertStringNotContainsString($payload, SqlRedactor::redact($sql));
+    }
+
+    /** @return array<string, array{0: string, 1: string}> */
+    public static function quoteFreeLiterals(): array
+    {
+        return [
+            'hexadecimal' => ['SELECT * FROM t WHERE tok = 0x534543524554', '534543524554'],
+            'binary' => ['SELECT * FROM t WHERE b = 0b101010111100', '101010111100'],
+            'scientific' => ['SELECT * FROM t WHERE n = 6.022e23', 'e23'],
+        ];
+    }
+
+    /**
+     * PCRE's JIT hits its stack limit on a single very long quoted literal and
+     * preg_replace() returns null; a (string) cast turned that into an empty
+     * statement with nothing to say why. The threshold is real — the previous
+     * version of this test used 40 backslashes, far below it, and passed
+     * against the unguarded implementation.
+     */
+    public function testAnOverlongStatementFailsVisiblyRatherThanSilently(): void
+    {
+        $sql = "SELECT * FROM t WHERE note = '" . str_repeat('a', 16000) . "' AND tok = 'SECRET'";
+
+        $out = SqlRedactor::redact($sql);
+
+        self::assertSame(SqlRedactor::REDACTION_FAILED, $out);
+        self::assertStringNotContainsString('SECRET', $out);
+        self::assertNotSame('', $out, 'failure must be reported, not an empty statement');
+    }
+
+    /**
+     * Exactly at the limit, and exactly one byte over. An earlier version used
+     * 200 characters against an 8000-byte limit and so tested nothing about the
+     * boundary it was named for.
+     */
+    public function testTheLengthLimitIsInclusive(): void
+    {
+        $atLimit = str_pad("SELECT 'x' /*", SqlRedactor::MAX_INPUT_LENGTH - 2, 'a') . '*/';
+        self::assertSame(SqlRedactor::MAX_INPUT_LENGTH, strlen($atLimit));
+        self::assertNotSame(SqlRedactor::REDACTION_FAILED, SqlRedactor::redact($atLimit));
+
+        $overLimit = $atLimit . 'a';
+        self::assertSame(SqlRedactor::MAX_INPUT_LENGTH + 1, strlen($overLimit));
+        self::assertSame(SqlRedactor::REDACTION_FAILED, SqlRedactor::redact($overLimit));
+    }
+
+    /**
+     * MySQL's doubled-quote escape is ONE literal. Scanning it as two adjacent
+     * literals made `'O''Reilly'` and `'Smith'` normalise differently, so two
+     * structurally identical statements landed in different N+1 groups.
+     */
+    public function testADoubledQuoteEscapeIsOneLiteralNotTwo(): void
+    {
+        self::assertSame(
+            "SELECT * FROM t WHERE a = '' AND b = ''",
+            SqlRedactor::redact("SELECT * FROM t WHERE a = 'O''Reilly' AND b = 'Smith'")
+        );
     }
 }

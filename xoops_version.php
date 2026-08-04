@@ -420,20 +420,19 @@ $modversion['config'][] = [
     'category'    => 'group_header',
 ];
 
-// tap() collectors (Events / Authz / Templates)
+// tap() collectors (Events / Templates)
+//
+// A collect_authz preference was declared here and removed before release: it
+// promised an Authz tab logging group-permission checks, but no seam exists to
+// collect them from a module. XoopsGroupPermHandler::checkRight() fires no
+// preload event, and xoops_getHandler() caches handlers in a function-local
+// static, so the handler cannot be decorated the way PreloadEventSpy decorates
+// the event table or TemplateResource hooks Smarty. Implementing it needs a
+// core-side seam first; until then the toggle would have done nothing.
 $modversion['config'][] = [
     'name'        => 'collect_events',
     'title'       => '_MI_DEBUGBAR_COLLECT_EVENTS',
     'description' => '_MI_DEBUGBAR_COLLECT_EVENTS_DSC',
-    'formtype'    => 'yesno',
-    'valuetype'   => 'int',
-    'default'     => 0,
-];
-
-$modversion['config'][] = [
-    'name'        => 'collect_authz',
-    'title'       => '_MI_DEBUGBAR_COLLECT_AUTHZ',
-    'description' => '_MI_DEBUGBAR_COLLECT_AUTHZ_DSC',
     'formtype'    => 'yesno',
     'valuetype'   => 'int',
     'default'     => 0,

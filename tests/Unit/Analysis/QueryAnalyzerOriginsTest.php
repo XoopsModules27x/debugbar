@@ -61,7 +61,7 @@ final class QueryAnalyzerOriginsTest extends TestCase
         self::assertSame('/c.php:3 (x3)', $origins[1]);
     }
 
-    public function testASingleHitOriginIsNotDecoratedWithACount(): void
+    public function testOneOriginIsAggregatedAcrossTheVariantsOfAShape(): void
     {
         $rows = array_merge(
             $this->queries('SELECT a FROM t WHERE id = 1', 1, '/only.php:9'),
@@ -74,6 +74,28 @@ final class QueryAnalyzerOriginsTest extends TestCase
 
         self::assertNotSame([], $result['similar_shapes']);
         self::assertSame(['/only.php:9 (x3)'], $result['similar_shapes'][0]['origins']);
+    }
+
+    /**
+     * topOrigins() decorates with a count only when an origin was hit more than
+     * once. The undecorated single-hit form had no coverage at all, despite the
+     * test above having been named for it.
+     */
+    public function testASingleHitOriginIsNotDecoratedWithACount(): void
+    {
+        $rows = array_merge(
+            $this->queries('SELECT a FROM t WHERE id = 1', 1, '/first.php:1'),
+            $this->queries('SELECT a FROM t WHERE id = 2', 1, '/second.php:2'),
+            $this->queries('SELECT a FROM t WHERE id = 3', 1, '/third.php:3')
+        );
+
+        // One shape, three variants, each from a different call site hit once.
+        $result = QueryAnalyzer::analyze($rows, 0.05, 2);
+
+        self::assertNotSame([], $result['similar_shapes']);
+        foreach ($result['similar_shapes'][0]['origins'] as $origin) {
+            self::assertStringNotContainsString('(x', $origin);
+        }
     }
 
     public function testQueriesWithoutAnOriginStillAnalyseCleanly(): void

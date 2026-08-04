@@ -59,8 +59,10 @@ final class TemplateOrigin
     public function resolve(string $name, int $mtime, int $bytes, string $theme, string $source = ''): array
     {
         // The hash is part of the key so two renders of the same name that
-        // produced different bytes cannot share a verdict.
-        $key = $name . '|' . $mtime . '|' . $bytes . '|' . md5($source);
+        // produced different bytes cannot share a verdict. xxh128, not md5:
+        // this is a cache key with no security role, and naming a broken digest
+        // here costs a standing SAST finding to explain on every scan.
+        $key = $name . '|' . $mtime . '|' . $bytes . '|' . hash('xxh128', $source);
         if (isset($this->cache[$key])) {
             return $this->cache[$key];
         }

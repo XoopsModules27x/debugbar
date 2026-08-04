@@ -20,8 +20,6 @@ use XoopsModules\Debugbar\Analysis\SystemDiagnostics;
 
 require_once __DIR__ . '/admin_header.php';
 
-$adminObject = \Xmf\Module\Admin::getInstance();
-
 xoops_cp_header();
 
 if (! AccessPolicy::isAllowed()) {

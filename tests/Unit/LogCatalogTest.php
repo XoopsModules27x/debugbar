@@ -85,9 +85,12 @@ final class LogCatalogTest extends TestCase
 
     public function testIgnoresNonMatchingFileNames(): void
     {
+        // No '../evil.log' fixture here: it resolved to sys_get_temp_dir(),
+        // which tearDown() does not clean and which is shared, so the run both
+        // leaked a file and could clobber someone else's. Traversal has its own
+        // coverage in testReadRejectsPathTraversal() below.
         file_put_contents($this->monologDirectory . '/xoops-2026-01-01.log', 'ok');
         file_put_contents($this->monologDirectory . '/not-a-log.txt', 'nope');
-        file_put_contents($this->monologDirectory . '/../evil.log', 'nope');
 
         $catalog = new LogCatalog($this->monologDirectory);
         $files = $catalog->listFiles();

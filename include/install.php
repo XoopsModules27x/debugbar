@@ -40,8 +40,63 @@ function xoops_module_update_debugbar($module, $previousVersion)
     $blocksReady = _debugbar_add_block_columns();
     $indexReady = _debugbar_add_request_index();
     $renameReady = _debugbar_rename_button_config();
+    $scrubReady = _debugbar_scrub_leaky_fingerprints();
 
-    return $assetsReady && $tableReady && $vitalsReady && $blocksReady && $indexReady && $renameReady;
+    return $assetsReady && $tableReady && $vitalsReady && $blocksReady && $indexReady && $renameReady && $scrubReady;
+}
+
+/**
+ * Clear stored query fingerprints that may embed literal values.
+ *
+ * QueryFingerprinter used to scan single- and double-quoted literals in two
+ * separate passes, which let an apostrophe inside a double-quoted value swallow
+ * the opening quote of a later single-quoted literal — leaving that literal's
+ * value in the fingerprint. That fingerprint is persisted as
+ * debugbar_profiles.slowest_fp and surfaced in the Analytics N+1 leaderboard, so
+ * fixing the scanner does not clean rows already written; they survive for the
+ * whole retention window. This clears them.
+ *
+ * Every stored fingerprint is cleared, not just the ones that look wrong.
+ *
+ * A narrower predicate was tried first — "a fully normalised fingerprint
+ * contains no quote character, so clear only rows that still have one" — and it
+ * is wrong in both directions. It MISSES a leaky row whose surviving literal
+ * carried no quote at all (a hex value such as 0x534543524554 normalised to
+ * `?x534543524554`), and it DESTROYS a correctly normalised row whose only
+ * quote sits inside a `backtick` identifier or an SQL comment. Since the point
+ * of this migration is that no stale value survives, completeness beats
+ * preserving history: the cost is at most `profiles_retention_days` of
+ * fingerprints, which regenerate on the next request to each URL.
+ *
+ * Idempotent: after one run every row is already empty and nothing matches.
+ */
+function _debugbar_scrub_leaky_fingerprints(): bool
+{
+    $db = $GLOBALS['xoopsDB'];
+    $table = $db->prefix('debugbar_profiles');
+
+    try {
+        // exec() returns bool. Ignoring it let a failed UPDATE report success,
+        // so the upgrade claimed the rows were clean while they were untouched.
+        $ok = $db->exec(sprintf(
+            'UPDATE %s SET slowest_fp = %s WHERE slowest_fp <> %s',
+            $table,
+            $db->quote(''),
+            $db->quote('')
+        ));
+
+        if (false === $ok) {
+            trigger_error('DebugBar fingerprint scrub did not complete', E_USER_WARNING);
+
+            return false;
+        }
+
+        return true;
+    } catch (\Throwable $e) {
+        trigger_error('DebugBar fingerprint scrub failed: ' . $e->getMessage(), E_USER_WARNING);
+
+        return false;
+    }
 }
 
 /**

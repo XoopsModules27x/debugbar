@@ -191,7 +191,6 @@ final class CachegrindParser
         $awaitingCalleeName = null;
         $awaitingCallerName = null;
 
-        $hasCostData = false;
         $recursionWarned = false;
 
         /** @var array<string, array{file: string, calls: int, invocations: int, self: float, inclusive_extra: float}> $functions */
@@ -230,7 +229,6 @@ final class CachegrindParser
             // --- FAST PATH: cost lines, the overwhelming majority of a profile.
             // Position tokens start with a digit, '+', '-', '*' (hex = '0x…').
             if (($first >= '0' && $first <= '9') || '+' === $first || '-' === $first || '*' === $first) {
-                $hasCostData = true;
                 $toks = (false === strpos($trimmed, '  '))
                     ? explode(' ', $trimmed)
                     : preg_split('/\s+/', $trimmed);
@@ -330,7 +328,6 @@ final class CachegrindParser
                         $functions[$currentFunctionName]['invocations']++;
                         $awaitingInclusiveCostLine = false;
                         $pendingCalleeName = null;
-                        $hasCostData = true;
 
                         break;
                     case 'cfn':
@@ -348,7 +345,6 @@ final class CachegrindParser
                 $awaitingCalleeName = $pendingCalleeName;
                 $awaitingCallerName = $currentFunctionName;
                 $awaitingInclusiveCostLine = true;
-                $hasCostData = true;
 
                 continue;
             }
@@ -417,6 +413,12 @@ final class CachegrindParser
             if (str_starts_with($trimmed, 'summary:')) {
                 $rest = trim(substr($trimmed, \strlen('summary:')));
                 $toks = '' === $rest ? [] : preg_split('/\s+/', $rest);
+                // Normalized like the positions:/events: branches above. The
+                // isset() below hides the difference today, which is exactly
+                // what makes the inconsistency a trap for the next edit.
+                if (false === $toks) {
+                    $toks = [];
+                }
                 if (null !== $timeIndex && isset($toks[$timeIndex])) {
                     $summaryTotal = (float) $toks[$timeIndex];
                 }
@@ -435,8 +437,6 @@ final class CachegrindParser
             $status = 'invalid';
             $warnings[] = 'invalid: no functions or summary parsed';
         }
-        unset($hasCostData);
-
         // --- unit resolution (table-driven on the Time token) ---
         $timeToken = (null !== $eventsTokens && null !== $timeIndex) ? ($eventsTokens[$timeIndex] ?? null) : null;
         $divisor = 1.0;

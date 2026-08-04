@@ -49,8 +49,6 @@ define('_MI_DEBUGBAR_RUM_ENABLE', 'Collect browser web-vitals (RUM beacon)');
 define('_MI_DEBUGBAR_RUM_ENABLE_DSC', 'Inject a small beacon (admins in debug mode only) that reports LCP/INP/CLS back to the Analytics page');
 define('_MI_DEBUGBAR_COLLECT_EVENTS', 'Collect preload events');
 define('_MI_DEBUGBAR_COLLECT_EVENTS_DSC', 'Log XOOPS preload events with listener counts and durations to an Events tab (max 300 rows).');
-define('_MI_DEBUGBAR_COLLECT_AUTHZ', 'Collect permission checks');
-define('_MI_DEBUGBAR_COLLECT_AUTHZ_DSC', 'Log group-permission checks with ALLOW/DENY results to an Authz tab (max 500 rows). High volume — enable only while debugging permissions.');
 define('_MI_DEBUGBAR_COLLECT_TEMPLATES', 'Collect template resolution');
 define('_MI_DEBUGBAR_COLLECT_TEMPLATES_DSC', 'Log which source (theme override, module file, database) served each template to a Templates tab (max 300 rows).');
 define('_MI_DEBUGBAR_XDEBUG_BUTTON', "Show 'Profile this request' button");

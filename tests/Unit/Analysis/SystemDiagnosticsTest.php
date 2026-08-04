@@ -62,6 +62,88 @@ final class SystemDiagnosticsTest extends TestCase
         return null;
     }
 
+    /**
+     * The capability guard has to name every method sqlModeRow() goes on to
+     * call. A connection carrying query()/isResultSet() but no fetchRow() used
+     * to clear the guard and only then hit an undefined-method Error, which the
+     * catch-all swallowed into "The mode could not be read." -- a message that
+     * blames the server for what is really a missing connection. Assert on the
+     * detail, not just the status: both paths report 'Unavailable', so only the
+     * detail tells them apart.
+     */
+    public function testSqlModeRowIsUnavailableWhenTheConnectionCannotFetch(): void
+    {
+        $previous = $GLOBALS['xoopsDB'] ?? null;
+        $GLOBALS['xoopsDB'] = new class () {
+            public function query(string $sql): bool
+            {
+                return true;
+            }
+
+            public function isResultSet(mixed $result): bool
+            {
+                return true;
+            }
+        };
+
+        try {
+            $report = (new SystemDiagnostics($this->root, $this->var))->collect([]);
+            $row = $this->findRow($report, 'runtime', 'sql_mode');
+
+            self::assertNotNull($row);
+            self::assertSame('Unavailable', $row['value']);
+            self::assertSame('info', $row['status']);
+            self::assertSame('No database connection to query.', $row['detail']);
+        } finally {
+            if (null === $previous) {
+                unset($GLOBALS['xoopsDB']);
+            } else {
+                $GLOBALS['xoopsDB'] = $previous;
+            }
+        }
+    }
+
+    /**
+     * isResultSet() alone still admits `true`, which query() returns for a
+     * statement that yields no result set. fetchRow() cannot be handed that, so
+     * the row must degrade rather than reach the fetch.
+     */
+    public function testSqlModeRowIsUnavailableWhenTheResultIsNotAResultSet(): void
+    {
+        $previous = $GLOBALS['xoopsDB'] ?? null;
+        $GLOBALS['xoopsDB'] = new class () {
+            public function query(string $sql): bool
+            {
+                return true;
+            }
+
+            public function isResultSet(mixed $result): bool
+            {
+                return true;
+            }
+
+            public function fetchRow(mixed $result): never
+            {
+                throw new \RuntimeException('fetchRow must not be reached');
+            }
+        };
+
+        try {
+            $report = (new SystemDiagnostics($this->root, $this->var))->collect([]);
+            $row = $this->findRow($report, 'runtime', 'sql_mode');
+
+            self::assertNotNull($row);
+            self::assertSame('Unavailable', $row['value']);
+            self::assertSame('The server returned no result.', $row['detail']);
+        } finally {
+            if (null === $previous) {
+                unset($GLOBALS['xoopsDB']);
+            } else {
+                $GLOBALS['xoopsDB'] = $previous;
+            }
+        }
+    }
+
     public function testExplainStashRowReportsMissingWhenDirectoryAbsent(): void
     {
         $diagnostics = new SystemDiagnostics($this->root, $this->var);

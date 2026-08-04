@@ -237,7 +237,10 @@ class AnalyticsBuilder
             return null;
         }
 
-        return $dir . '/' . md5($file . '|' . $mtime . '|' . $bytes . '|' . $topN) . '.json';
+        // xxh128, not md5: a cache filename with no security role. Changing the
+        // algorithm just orphans existing entries, which the 7-day sweep in
+        // cacheWrite() removes.
+        return $dir . '/' . hash('xxh128', $file . '|' . $mtime . '|' . $bytes . '|' . $topN) . '.json';
     }
 
     /**
@@ -295,7 +298,14 @@ class AnalyticsBuilder
             if (null === $path) {
                 return;
             }
-            @file_put_contents($path, json_encode($result->toArray()), LOCK_EX);
+            // A false return would be written as '' and read back as null, so
+            // the parse would repeat on every view until the 7-day sweep
+            // removed the useless entry.
+            $json = json_encode($result->toArray());
+            if (! is_string($json)) {
+                return;
+            }
+            @file_put_contents($path, $json, LOCK_EX);
 
             $cutoff = time() - self::CACHE_MAX_AGE_SECONDS;
             foreach ((array) @glob(\dirname($path) . '/*.json') as $old) {

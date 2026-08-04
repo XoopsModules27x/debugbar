@@ -26,6 +26,9 @@ defined('XOOPS_ROOT_PATH') || exit('Restricted access');
  */
 final class QueryFingerprinter
 {
+    /** Returned instead of a partial fingerprint when normalisation cannot complete. */
+    public const FINGERPRINT_FAILED = '(statement could not be fingerprinted)';
+
     /**
      * Normalize an SQL statement to its structural fingerprint.
      *
@@ -35,18 +38,29 @@ final class QueryFingerprinter
      *
      * @param string $sql raw SQL statement
      *
-     * @return string normalized fingerprint
+     * @return string normalized fingerprint, or FINGERPRINT_FAILED when the
+     *                statement is too long to scan or a pass could not complete
      */
     public static function fingerprint(string $sql): string
     {
         $sql = trim($sql);
+        if (strlen($sql) > SqlRedactor::MAX_INPUT_LENGTH) {
+            return self::FINGERPRINT_FAILED;
+        }
 
-        // String literals (single- and double-quoted, with backslash escapes)
-        $sql = (string) preg_replace("/'(?:[^'\\\\]|\\\\.)*'/s", '?', $sql);
-        $sql = (string) preg_replace('/"(?:[^"\\\\]|\\\\.)*"/s', '?', $sql);
-
-        // Numeric literals not embedded in identifiers (`x123`, `utf8mb4`, `tbl_2`)
-        $sql = (string) preg_replace('/(?<![A-Za-z0-9_`.])\d+(?:\.\d+)?/', '?', $sql);
+        // String and numeric literals. Shares SqlRedactor's patterns
+        // deliberately: this fingerprint is stored in
+        // debugbar_profiles.slowest_fp, so a literal that survives the scan is
+        // persisted for the whole retention window. See those constants for why
+        // one alternation pass is required and why hex/binary/exponent forms
+        // are matched explicitly.
+        foreach ([SqlRedactor::STRING_LITERAL_PATTERN, SqlRedactor::NUMERIC_LITERAL_PATTERN] as $pattern) {
+            $replaced = preg_replace($pattern, '?', $sql);
+            if (null === $replaced) {
+                return self::FINGERPRINT_FAILED;
+            }
+            $sql = $replaced;
+        }
 
         // Collapse IN lists of placeholders to a single marker
         $sql = (string) preg_replace('/\bIN\s*\(\s*\?(?:\s*,\s*\?)*\s*\)/i', 'IN (?+)', $sql);

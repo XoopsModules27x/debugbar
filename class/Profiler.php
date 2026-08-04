@@ -196,8 +196,13 @@ final class Profiler
             $duplicateRuntimes = [];
             $fragmentFullTheme = false;
             if (ob_get_level() > 0) {
-                $html = (string) @ob_get_contents();
-                if ($html !== '' && strlen($html) <= 2097152) {
+                // Length first, THEN the copy. Reading the buffer before testing
+                // its size allocated a second copy of the whole response just to
+                // discard it — doubling peak memory at the exact point this
+                // class reports memory_get_peak_usage().
+                $bufferLength = (int) @ob_get_length();
+                if ($bufferLength > 0 && $bufferLength <= 2097152) {
+                    $html = (string) @ob_get_contents();
                     if ($this->isFragment()) {
                         // A fragment/AJAX response carrying a whole themed document
                         // means the request went down the full theme path it was
@@ -210,8 +215,9 @@ final class Profiler
                             $duplicateRuntimes = $scan['duplicate_runtimes'];
                         }
                     }
+                    // Inside the branch: $html only exists on this path now.
+                    unset($html);
                 }
-                unset($html);
             }
 
             $metrics = ['queries' => $stats['count'], 'query_ms' => $stats['total_ms'], 'boot_ms' => $bootMs, 'total_ms' => $totalMs, 'memory_mb' => $memoryMb, 'payload_kb' => $this->payloadKb(), 'worst_repeat' => $stats['worst_repeat'], 'query_errors' => $stats['error_count'], 'fragment_full_theme' => $fragmentFullTheme, 'duplicate_runtimes' => $duplicateRuntimes];
@@ -310,6 +316,12 @@ final class Profiler
         foreach ($slowQueries as $entry) {
             if ($explained >= self::MAX_EXPLAIN) {
                 break;
+            }
+            if (true === ($entry['sql_truncated'] ?? false)) {
+                // Cut at QUERY_SQL_CAP, so no longer parseable. EXPLAINing it
+                // raises a syntax error the catch below discards, which spent an
+                // EXPLAIN slot and reported nothing.
+                continue;
             }
             $sql = trim($entry['sql']);
             if (0 !== stripos($sql, 'SELECT')) {

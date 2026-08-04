@@ -64,4 +64,20 @@ final class StashRedactionTest extends TestCase
             self::assertStringNotContainsString('42', $value);
         }
     }
+
+    /**
+     * Stash-level guard for the mixed-quote literal bug. The behaviour itself
+     * is pinned in SqlRedactorTest; this asserts the value that actually
+     * reaches disk carries no secret, which is the promise this file documents.
+     */
+    public function testStashedValueCarriesNoSecretAcrossMixedQuoteTypes(): void
+    {
+        $sql = 'SELECT * FROM xc71_session WHERE owner = "O\'Brien" AND sess_id = \'e42b6a7d2911654de09c429b91f10b2f\'';
+
+        $map = [hash('sha256', $sql) => SqlRedactor::redact($sql)];
+
+        foreach ($map as $value) {
+            self::assertStringNotContainsString('e42b6a7d2911654de09c429b91f10b2f', $value);
+        }
+    }
 }

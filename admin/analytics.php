@@ -369,7 +369,7 @@ if (true !== $xdebug['can_trigger']) {
         . '<pre style="background:#f7f7f7;border:1px solid #ddd;padding:10px;font-family:monospace;">'
         . "xdebug.mode=develop,profile\n"
         . "xdebug.start_with_request=trigger\n"
-        . 'xdebug.output_dir="C:/wamp64/tmp/xdebug"' . "\n"
+        . 'xdebug.output_dir="' . $esc('' !== $xdebug['output_dir'] ? $xdebug['output_dir'] : sys_get_temp_dir() . '/xdebug') . '"' . "\n"
         . 'xdebug.profiler_append=0'
         . '</pre>';
 }
@@ -401,7 +401,12 @@ echo $table(
     $rows
 );
 
-echo '<form method="post" action="analytics.php" style="margin:8px 0;">'
+// One click otherwise deletes every profile older than 30 days. The confirm
+// string was already defined and had no caller — the dialog it was written for
+// went missing, leaving an orphan constant rather than an intentional choice.
+echo '<form method="post" action="analytics.php" style="margin:8px 0;" onsubmit="return confirm('
+    . $esc((string) json_encode(_AM_DEBUGBAR_AN_CG_PURGE_CONFIRM, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP))
+    . ');">'
     . '<input type="hidden" name="op" value="cg_purge">'
     . $tokenHtml
     . '<button type="submit" class="formButton">' . $esc(_AM_DEBUGBAR_AN_CG_PURGE) . '</button>'

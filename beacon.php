@@ -17,6 +17,7 @@ declare(strict_types=1);
  * @package             debugbar
  */
 
+use XoopsModules\Debugbar\Admin\AccessPolicy;
 use XoopsModules\Debugbar\ProfileRepository;
 
 require_once dirname(__DIR__, 2) . '/mainfile.php';
@@ -44,11 +45,11 @@ if ('POST' !== ($_SERVER['REQUEST_METHOD'] ?? '')) {
     debugbar_beacon_exit(405);
 }
 
-// Admin + debug mode gates mirror the preload's display gates
-if (! (bool) ($GLOBALS['xoopsUserIsAdmin'] ?? false)) {
-    debugbar_beacon_exit(403);
-}
-if (isset($GLOBALS['xoopsConfig']['debug_mode']) && 0 === (int) $GLOBALS['xoopsConfig']['debug_mode']) {
+// Module admin + XOOPS debug mode + the module's own enable switch, decided in
+// one place so this endpoint cannot drift from the toolbar that posts to it.
+// The hand-rolled gates this replaces omitted debugbar_enable entirely, so
+// vitals were still accepted into debugbar_profiles with DebugBar switched off.
+if (! AccessPolicy::isRuntimeAllowed()) {
     debugbar_beacon_exit(403);
 }
 

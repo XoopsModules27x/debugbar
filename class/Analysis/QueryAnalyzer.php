@@ -204,6 +204,10 @@ final class QueryAnalyzer
         $sql = preg_replace('/\s+/', ' ', trim($sql)) ?? $sql;
         $sql = preg_replace('/\s*([=<>(),])\s*/', '$1', $sql) ?? $sql;
 
-        return strtolower($sql);
+        // Hashed, not returned whole: this is only ever an array key, and a page
+        // issuing thousands of queries otherwise held a second full copy of
+        // every statement (up to QUERY_SQL_CAP each) purely as key material.
+        // xxh128 matches the digest used elsewhere in the module.
+        return hash('xxh128', strtolower($sql));
     }
 }

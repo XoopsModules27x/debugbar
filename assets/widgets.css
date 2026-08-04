@@ -814,15 +814,16 @@ div.phpdebugbar span.phpdebugbar-widgets-badge {
     height: 12px;
 }
 
-/* -------------------------------------- */
-/* Syntax highlighting                                                        */
-/*                                                                            */
-/* The bundled highlighter is configured with classPrefix                     */
-/* "phpdebugbar-hljs-", so the stock highlight.js stylesheets, which target   */
-/* .hljs-*, never matched a single token. These rules use the theme's own     */
-/* custom properties where a colour is structural, and fixed hues that hold   */
-/* up on both the light and the dark background otherwise, so highlighting    */
-/* follows the toolbar theme without a second stylesheet.                     */
+/* --------------------------------------
+ * Syntax highlighting
+ *
+ * The bundled highlighter is configured with classPrefix
+ * "phpdebugbar-hljs-", so the stock highlight.js stylesheets, which target
+ * .hljs-*, never matched a single token. These rules use the theme's own
+ * custom properties where a colour is structural, and fixed hues that hold
+ * up on both the light and the dark background otherwise, so highlighting
+ * follows the toolbar theme without a second stylesheet.
+ */
 
 .phpdebugbar code .phpdebugbar-hljs-keyword,
 .phpdebugbar code .phpdebugbar-hljs-selector-tag,

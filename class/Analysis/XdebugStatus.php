@@ -123,7 +123,14 @@ final class XdebugStatus
                 $raw = (string) \ini_get('xdebug.mode');
                 $modes = '' === $raw ? [] : explode(',', $raw);
             }
-            $modes = array_values(array_map('strval', $modes));
+            // Trim: the ini fallback splits on commas only, so a value written
+            // as "develop, profile" yields " profile". evaluate() compares modes
+            // with in_array(..., true), so the untrimmed token silently made
+            // can_trigger false and Analytics reported profiling unavailable.
+            $modes = array_values(array_filter(
+                array_map(static fn ($mode): string => trim((string) $mode), $modes),
+                static fn (string $mode): bool => '' !== $mode
+            ));
 
             $startWithRequest = (string) \ini_get('xdebug.start_with_request');
             $outputDir = (string) \ini_get('xdebug.output_dir');

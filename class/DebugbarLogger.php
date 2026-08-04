@@ -617,15 +617,25 @@ class DebugbarLogger
             $files = glob($dir . '/*.json');
             $files = is_array($files) ? $files : [];
             $now = time();
+            // Suppressed: a concurrent request can unlink a file between the
+            // glob() and the stat, and this logger captures PHP warnings — an
+            // unsuppressed filemtime() would report its own housekeeping race
+            // into the Messages panel it serves.
             foreach ($files as $f) {
-                if ($now - (int) filemtime($f) > 900) {
+                if ($now - (int) @filemtime($f) > 900) {
                     @unlink($f);
                 }
             }
             $files = glob($dir . '/*.json');
             $files = is_array($files) ? $files : [];
             if (count($files) >= 50) {
-                usort($files, static fn ($a, $b) => filemtime($a) <=> filemtime($b));
+                // Stat once per file, not once per comparison: inside the
+                // comparator this ran O(n log n) times against the filesystem.
+                $times = [];
+                foreach ($files as $f) {
+                    $times[$f] = (int) @filemtime($f);
+                }
+                usort($files, static fn ($a, $b) => $times[$a] <=> $times[$b]);
                 foreach (array_slice($files, 0, count($files) - 49) as $f) {
                     @unlink($f);
                 }
@@ -633,8 +643,8 @@ class DebugbarLogger
             $map = [];
             foreach (array_slice($this->queryLog, 0, 200) as $entry) {
                 $sql = (string) ($entry['sql'] ?? '');
-                if ('' === $sql) {
-                    continue;
+                if ('' === $sql || true === ($entry['sql_truncated'] ?? false)) {
+                    continue;   // truncated statements cannot be EXPLAINed
                 }
                 // Key on the hash of the ORIGINAL sql (matches the bar's sql_hash);
                 // store only a redacted, runnable form so no secret is persisted.
@@ -643,7 +653,16 @@ class DebugbarLogger
             if ([] === $map) {
                 return;
             }
-            @file_put_contents($dir . '/' . strtolower($requestId) . '.json', json_encode($map));
+            // json_encode() returns false on invalid UTF-8 in a recorded
+            // statement; file_put_contents() would coerce that to '' and leave a
+            // file that exists but decodes to null. The EXPLAIN button would
+            // then fail for every query in this request until the 15-minute
+            // prune, presenting as missing data rather than a write error.
+            $json = json_encode($map);
+            if (! is_string($json)) {
+                return;
+            }
+            @file_put_contents($dir . '/' . strtolower($requestId) . '.json', $json, LOCK_EX);
         } catch (\Throwable $e) {
             // stash is best-effort; never break rendering
         }
@@ -1120,7 +1139,23 @@ class DebugbarLogger
                 // Bootstrap config bridging server-side settings to the JS widgets
                 // (Copy-to-clipboard secret redaction). Best-effort progressive
                 // enhancement — never break the page if config lookup fails.
-                $copyRedact = (bool) (Helper::getInstance()->getConfig('copy_redact') ?? true);
+                //
+                // Both preferences are read here, in one guarded block, because
+                // renderDebugBar() has no try/catch of its own: an unguarded
+                // getConfig() throwing during footer rendering would break the
+                // page the bar is only meant to observe. The defaults are the
+                // safe direction — redaction ON, on-demand EXPLAIN OFF, so a
+                // failed lookup emits no token and no request id.
+                $copyRedact = true;
+                $explainOnDemand = false;
+
+                try {
+                    $helper = Helper::getInstance();
+                    $copyRedact = (bool) ($helper->getConfig('copy_redact') ?? true);
+                    $explainOnDemand = (bool) ($helper->getConfig('explain_on_demand') ?? false);
+                } catch (\Throwable) {
+                    // Defaults stand.
+                }
                 $output .= '<script>window.XoopsDebugbarConfig=' . json_encode(['copyRedact' => $copyRedact], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) . ';</script>' . "\n";
 
                 // Load XOOPS custom settings CSS
@@ -1149,8 +1184,8 @@ class DebugbarLogger
                 // The client never submits SQL: only the request id + a hash
                 // of a statement the server itself recorded (see
                 // stashQueriesForExplain()/explain.php). Off unless the
-                // explain_on_demand module preference is enabled.
-                $explainOnDemand = (bool) (Helper::getInstance()->getConfig('explain_on_demand') ?? false);
+                // explain_on_demand module preference is enabled — read in the
+                // guarded block above, not again here.
                 $explainToken = $explainOnDemand ? $this->explainToken : '';
                 $explainRequestId = $explainOnDemand ? \XoopsModules\Debugbar\Profiler::getInstance()->getRequestId() : '';
                 $output .= '<script type="text/javascript" src="'
@@ -1263,6 +1298,11 @@ class DebugbarLogger
                     if (count($this->queryLog) < self::QUERY_LOG_CAP) {
                         $this->queryLog[] = [
                             'sql' => substr($sqlKey, 0, self::QUERY_SQL_CAP),
+                            // Recorded, not inferred: a statement cut at the cap
+                            // is no longer valid SQL, so EXPLAINing it can only
+                            // produce a syntax error that the caller swallows
+                            // while still spending one of its EXPLAIN slots.
+                            'sql_truncated' => strlen($sqlKey) > self::QUERY_SQL_CAP,
                             'ms' => $queryTime * 1000.0,
                             'error' => $level === LogLevel::ERROR,
                             // Captured inside the cap guard on purpose: a backtrace

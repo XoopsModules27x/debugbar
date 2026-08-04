@@ -62,7 +62,11 @@ if ('POST' !== ($_SERVER['REQUEST_METHOD'] ?? '')) {
     debugbar_explain_fail('Method not allowed.', 405);
 }
 
-if (! (bool) ($GLOBALS['xoopsUserIsAdmin'] ?? false)) {
+// Module admin + XOOPS debug mode + the module's own enable switch, decided in
+// one place so this endpoint cannot drift from the toolbar that posts to it.
+// The bare admin flag this replaces checked neither debug mode nor
+// debugbar_enable, so EXPLAIN stayed reachable with DebugBar switched off.
+if (! \XoopsModules\Debugbar\Admin\AccessPolicy::isRuntimeAllowed()) {
     debugbar_explain_fail('Administrator access required', 403);
 }
 

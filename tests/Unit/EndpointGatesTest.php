@@ -18,17 +18,82 @@ use XoopsModules\Debugbar\Admin\AccessPolicy;
  * from the endpoint source so a future edit that weakens a gate (e.g.
  * loosens the hash-length regex) breaks this test.
  *
- * This build has no xdebug-arm.php endpoint, so the corresponding gate
- * coverage from the upstream test is not ported.
+ * xdebug-arm.php gate coverage is asserted against the endpoint source
+ * below, because the script cannot be executed without a booted XOOPS.
  *
  * Read at: class/ProfileRepository.php (updateVitals() clamping),
- * explain.php, beacon.php.
+ * explain.php, beacon.php, xdebug-arm.php.
  */
 final class EndpointGatesTest extends TestCase
 {
+    /**
+     * Every endpoint that serves the toolbar must gate on the SAME decision the
+     * preload uses to render it. An endpoint stricter than the bar shows a
+     * button that always 403s; an endpoint laxer than the bar accepts writes the
+     * bar would never have offered. Asserted against the shipped source, so
+     * swapping any one of them back to a hand-rolled check breaks this test.
+     */
+    public function testEveryRuntimeEndpointSharesTheToolbarGate(): void
+    {
+        $root = dirname(__DIR__, 2);
+
+        foreach (['beacon.php', 'explain.php', 'xdebug-arm.php'] as $endpoint) {
+            $source = file_get_contents($root . '/' . $endpoint);
+            self::assertIsString($source);
+            self::assertStringContainsString(
+                'AccessPolicy::isRuntimeAllowed()',
+                $source,
+                $endpoint . ' must gate on the shared runtime policy'
+            );
+            self::assertStringNotContainsString(
+                "\$GLOBALS['xoopsUserIsAdmin']",
+                $source,
+                $endpoint . ' must not re-implement the admin check by hand'
+            );
+        }
+
+        // Count, do not merely detect: the preload gates at TWO seams
+        // (auth.success and common.end, the latter being what catches anonymous
+        // requests). Asserting mere presence let either seam be deleted while
+        // the other kept this test green.
+        $preload = file_get_contents($root . '/preloads/core.php');
+        self::assertIsString($preload);
+        self::assertSame(
+            2,
+            substr_count($preload, 'AccessPolicy::isRuntimeAllowed()'),
+            'the preload must gate at both the auth.success and common.end seams'
+        );
+    }
+
+    /**
+     * The admin pages keep the STRICTER gate. They expose site-wide SQL,
+     * sessions and configuration accumulated across other people's requests,
+     * which is a different exposure from a toolbar showing you your own.
+     */
+    public function testAdminPagesKeepTheStricterGate(): void
+    {
+        foreach (['analytics.php', 'diagnostics.php', 'logs.php'] as $page) {
+            $source = file_get_contents(dirname(__DIR__, 2) . '/admin/' . $page);
+            self::assertIsString($source);
+            self::assertStringContainsString(
+                'AccessPolicy::isAllowed()',
+                $source,
+                $page . ' must keep the webmaster-scoped gate'
+            );
+            self::assertStringNotContainsString(
+                'AccessPolicy::isRuntimeAllowed()',
+                $source,
+                $page . ' must not be downgraded to the runtime gate'
+            );
+        }
+    }
+
     // --- explain.php -------------------------------------------------
-    // Gates (in source order): POST only; $GLOBALS['xoopsUserIsAdmin']
-    // non-empty; xoopsSecurity->check(false, $token, 'DEBUGBAR_EXPLAIN')
+    // Gates (in source order): POST only; AccessPolicy::isRuntimeAllowed()
+    // (module admin AND debug_mode non-zero AND debugbar_enable — the same
+    // decision the preload makes to render the bar, so the EXPLAIN button
+    // and the endpoint behind it can never disagree);
+    // xoopsSecurity->check(false, $token, 'DEBUGBAR_EXPLAIN')
     // (reusable token, since one page load may EXPLAIN several rows);
     // Helper::getConfig('explain_on_demand') truthy; request_id shape
     // ^[0-9a-f]{8,32}$; sql_hash shape ^[0-9a-f]{64}$ (a full sha256 hex
@@ -75,8 +140,10 @@ final class EndpointGatesTest extends TestCase
     }
 
     // --- beacon.php -----------------------------------------------------
-    // Gates: POST only; xoopsUserIsAdmin; xoopsConfig['debug_mode'] != 0;
-    // raw body capped at 4096 bytes (file_get_contents(..., 0, 4096));
+    // Gates: POST only; AccessPolicy::isRuntimeAllowed() — note this replaced
+    // a hand-rolled admin + debug_mode pair that omitted debugbar_enable
+    // entirely, so vitals were accepted into debugbar_profiles while DebugBar
+    // was switched off; raw body capped at 4096 bytes (file_get_contents(..., 0, 4096));
     // JSON-decoded to an array or reject; token read from the JSON BODY
     // (sendBeacon cannot set custom headers) and checked with
     // xoopsSecurity->check(true, $token, 'DEBUGBAR_RUM') — single-use;
@@ -119,10 +186,13 @@ final class EndpointGatesTest extends TestCase
     }
 
     // --- xdebug-arm.php ------------------------------------------------
-    // Gates (in source order): POST only; AccessPolicy::isAllowed() (module
-    // admin AND debug_mode non-zero AND debugbar_enable) — deliberately the
-    // same decision object the admin pages use, so this endpoint cannot
-    // drift from them; xoopsSecurity->check(true, $token, 'DEBUGBAR_XDEBUG')
+    // Gates (in source order): POST only; AccessPolicy::isRuntimeAllowed()
+    // (module admin AND debug_mode non-zero AND debugbar_enable) — the same
+    // decision the preload uses to render the button that posts here. It used
+    // isAllowed(), which is stricter on two axes the toolbar does not share
+    // (webmaster group, and debug_mode 3), so the button could render for a
+    // caller this endpoint would refuse;
+    // xoopsSecurity->check(true, $token, 'DEBUGBAR_XDEBUG')
     // — note `true`, so the token is SINGLE-USE and consumed on success,
     // unlike the reusable DEBUGBAR_EXPLAIN token; and finally
     // XdebugStatus::read()['can_trigger']. Only then is a 60-second
@@ -131,7 +201,8 @@ final class EndpointGatesTest extends TestCase
 
     public function testXdebugArmGateIsTheSharedAccessPolicyDecision(): void
     {
-        // Fails closed on every axis — mirrors AccessPolicy::evaluate().
+        // Fails closed on every axis — mirrors AccessPolicy::evaluate(), which
+        // both wrappers delegate to.
         self::assertTrue(AccessPolicy::evaluate(true, 1, true));
         self::assertFalse(AccessPolicy::evaluate(false, 1, true), 'non-admin must be refused');
         self::assertFalse(AccessPolicy::evaluate(true, 0, true), 'debug mode off must be refused');

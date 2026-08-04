@@ -16,6 +16,7 @@ declare(strict_types=1);
  * @package             debugbar
  */
 
+use XoopsModules\Debugbar\Admin\AccessPolicy;
 use XoopsModules\Debugbar\Collector\PreloadEventSpy;
 use XoopsModules\Debugbar\Collector\TemplateResource;
 use XoopsModules\Debugbar\DebugbarLogger;
@@ -104,30 +105,21 @@ class DebugbarCorePreload extends XoopsPreloadItem
     {
         $logger = DebugbarLogger::getInstance();
 
-        // Only show debugbar to admin users
-        if (! (bool) ($GLOBALS['xoopsUserIsAdmin'] ?? false)) {
+        // Admin + debug mode + the module's enable switch, as one decision.
+        // This is the SAME call beacon.php, explain.php and xdebug-arm.php make,
+        // which is the point: whatever renders the bar is exactly what accepts
+        // its buttons' requests, so the bar can never offer a control whose
+        // endpoint refuses it. AccessPolicy never throws — a preload must not.
+        if (! AccessPolicy::isRuntimeAllowed()) {
             $logger->disable();
             self::disableRay();
 
             return;
         }
 
-        // Check if debug_mode is enabled in XOOPS config
-        if (isset($GLOBALS['xoopsConfig']['debug_mode']) && (int) $GLOBALS['xoopsConfig']['debug_mode'] === 0) {
-            $logger->disable();
-            self::disableRay();
-
-            return;
-        }
-
-        // Check module config if available
+        // Read once for the tuning knobs below. The enable switch itself is
+        // already decided above, inside AccessPolicy.
         $moduleConfig = self::getModuleConfig();
-        if (is_array($moduleConfig) && isset($moduleConfig['debugbar_enable']) && ! (bool) $moduleConfig['debugbar_enable']) {
-            $logger->disable();
-            self::disableRay();
-
-            return;
-        }
 
         // Apply slow query threshold from module config
         if (is_array($moduleConfig) && isset($moduleConfig['slow_query_threshold'])) {
@@ -193,10 +185,12 @@ class DebugbarCorePreload extends XoopsPreloadItem
         $logger = DebugbarLogger::getInstance();
         self::registerMonolog();
 
-        // If no admin user is authenticated, disable debug output.
-        // eventCoreIncludeCommonAuthSuccess handles the admin case;
-        // this catches anonymous requests where that event never fires.
-        if (! (bool) ($GLOBALS['xoopsUserIsAdmin'] ?? false)) {
+        // Same decision as auth.success above, re-asked here because that event
+        // never fires on an anonymous request — this is the seam that catches
+        // them. Asking the identical question at both seams is what makes "the
+        // bar is enabled" and "the endpoints accept" one invariant rather than
+        // two rules that can drift.
+        if (! AccessPolicy::isRuntimeAllowed()) {
             $logger->disable();
             self::disableRay();
         }
@@ -435,11 +429,6 @@ class DebugbarCorePreload extends XoopsPreloadItem
         return $logger;
     }
 
-    /**
-     * Helper: get the debugbar module configuration.
-     *
-     * @return array<string, mixed>|false
-     */
     /** The live XoopsPreload singleton whose event table the spy stands in for. */
     private static function preload(): \XoopsPreload
     {

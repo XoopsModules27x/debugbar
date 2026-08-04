@@ -208,7 +208,7 @@ Read the durations first. In the capture above, `core.include.common.end` carrie
 
 **What to do with it:** settle "is my override actually being used?" without guessing. This is the most common XOOPS support question, and until now the toolbar could not answer it: the Smarty panel below shows the *variables* a template received, not which file supplied the template. If you copied a template into your theme and the page has not changed, this panel tells you in one line whether XOOPS is reading your copy or still reading the module's.
 
-The origin is verified rather than inferred — a file is named only when its size and modification time both match the bytes actually rendered — so a stale copy in the right place is not mistaken for the live one. Where two candidates are genuinely indistinguishable the panel says `ambiguous` and names both, which is a more honest answer than a coin toss.
+The origin is verified rather than inferred — size and modification time select the candidates, and the file's contents must match the bytes actually rendered before it is named — so a stale copy in the right place is not mistaken for the live one. Where two candidates are genuinely indistinguishable the panel says `ambiguous` and names both, which is a more honest answer than a coin toss.
 
 The multipliers are the second thing to read. In the capture above `system_block_dummy.tpl` renders sixteen times in one request, and `publisher_items_recent.tpl` and `newbb_block.tpl` four times each. Repeated renders are usually repeated blocks, so this pairs directly with the Blocks panel: a template rendered sixteen times with block caching off is sixteen block renders, each with its own queries, on every page view.
 

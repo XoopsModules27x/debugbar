@@ -11,11 +11,11 @@ This inventory describes the standalone `modules/debugbar` release tree. The thr
 | PHP classes | 27 | Collection, profiling, storage, diagnostics, event/template collectors, and optional Ray bridge |
 | Install and preload | 4 | Autoloading, lifecycle registration, schema/assets/key setup |
 | Language and help | 10 | English strings and XOOPS help templates |
-| Documentation shipped | 28 | Tutorials, Ray guide, credits, legacy notes, and this inventory, plus the 24 screenshots under docs/images/ referenced by the usage guide |
+| Documentation shipped | 31 | Tutorials, Ray guide, credits, legacy notes, and this inventory, plus the 25 screenshots under docs/images/ referenced by the usage guide |
 | SQL | 1 | Profile table definition |
 | Module asset overlay | 6 | XOOPS-specific styles and scripts reapplied during update |
 | Generated browser assets | 32 | Web-readable PHP DebugBar resources plus copied overlay files |
-| **Total** | **119** | Excludes the three review notes and repository tests outside the module tree |
+| **Total** | **126** | Excludes the three review notes, and the development and CI files that `.gitattributes` marks `export-ignore` — `tests/`, `stubs/`, `testdata/`, `.github/`, and the tooling configs — none of which reach the release archive |
 
 ## Module-owned source tree
 
@@ -110,4 +110,4 @@ debugbar/
 
 ## Tests
 
-The regression suite lives in the XOOPS repository at `tests/unit/modules/debugbar/`, outside the standalone module package. It covers analysis and budgets, request sanitization, the EXPLAIN secret store, logger contracts, profile storage, optional integrations, admin-page structure, log parsing, cachegrind handling, and diagnostics.
+The regression suite lives inside this module package at `tests/Unit/`, and is run with `composer test` from the module root. Each test resolves the module root through relative `dirname(__DIR__, N)` calls counted up from its own location, so the suite only works from inside the module tree. It covers the access policy and its two gates, analysis and budgets, request sanitization, SQL redaction and query fingerprinting, logger contracts, profile storage, optional integrations, admin-page structure and endpoint gating, manifest/preference consistency, log parsing, cachegrind handling, and diagnostics.

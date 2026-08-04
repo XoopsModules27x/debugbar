@@ -154,7 +154,7 @@ final class SystemDiagnostics
         $current = set_error_handler(static fn (): bool => false);
         restore_error_handler();
 
-        $name     = $this->describeCallable($current);
+        $name = $this->describeCallable($current);
         $detected = match (true) {
             '' === $name => 'php',
             str_contains($name, 'XoopsErrorHandler'), str_contains($name, 'XoopsLogger') => 'core',
@@ -176,7 +176,9 @@ final class SystemDiagnostics
 
         return $this->row(
             'error_handler',
-            'php' === $detected ? 'PHP default' : ('' !== $name ? $name : $detected),
+            // No inner fallback: the match above maps an empty $name to 'php', so
+            // reaching the false branch means $name is non-empty by construction.
+            'php' === $detected ? 'PHP default' : $name,
             $agrees ? 'ok' : 'warning',
             '' === $declared
                 ? 'This XOOPS does not declare an error_screen owner in debug.php.'
@@ -203,16 +205,25 @@ final class SystemDiagnostics
     private function sqlModeRow(): array
     {
         $db = $GLOBALS['xoopsDB'] ?? null;
-        if (! is_object($db) || ! method_exists($db, 'query') || ! method_exists($db, 'isResultSet')) {
+        // fetchRow is named here too: the guard has to cover every method this
+        // routine goes on to call, or a loose $xoopsDB satisfies the check and
+        // then fatals on the call below.
+        if (! is_object($db)
+            || ! method_exists($db, 'query')
+            || ! method_exists($db, 'isResultSet')
+            || ! method_exists($db, 'fetchRow')) {
             return $this->row('sql_mode', 'Unavailable', 'info', 'No database connection to query.');
         }
 
         try {
             $result = $db->query('SELECT @@SESSION.sql_mode');
-            if (! $db->isResultSet($result)) {
+            // Two-part fetch guard, per the XOOPS convention: isResultSet() alone
+            // still admits `true`, which query() returns for a statement yielding
+            // no result set, and fetchRow() cannot be handed that.
+            if (! $db->isResultSet($result) || ! ($result instanceof \mysqli_result)) {
                 return $this->row('sql_mode', 'Unavailable', 'info', 'The server returned no result.');
             }
-            $row  = $db->fetchRow($result);
+            $row = $db->fetchRow($result);
             $mode = is_array($row) ? trim((string) ($row[0] ?? '')) : '';
         } catch (\Throwable) {
             return $this->row('sql_mode', 'Unavailable', 'info', 'The mode could not be read.');
@@ -287,7 +298,7 @@ final class SystemDiagnostics
     }
 
     /**
-     * A's on-demand EXPLAIN design now stashes the server's own recorded SQL
+     * The on-demand EXPLAIN design now stashes the server's own recorded SQL
      * server-side instead of trusting a client-submitted signed token (see
      * DebugbarLogger::stashQueriesForExplain()/explain.php). This row reports
      * the health of that stash directory instead: does it exist, is it

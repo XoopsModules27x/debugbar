@@ -51,8 +51,11 @@ if ('POST' !== ($_SERVER['REQUEST_METHOD'] ?? '')) {
 }
 
 // Module admin + XOOPS debug mode + the module's own enable switch, decided in
-// one place so this endpoint cannot drift from the pages it belongs to.
-if (! AccessPolicy::isAllowed()) {
+// one place so this endpoint cannot drift from the toolbar whose button posts
+// to it. Deliberately the RUNTIME gate, not the admin-page one: the button is
+// rendered under the toolbar's gate, so gating the endpoint any tighter would
+// show a delegated module admin a button that always answers 403.
+if (! AccessPolicy::isRuntimeAllowed()) {
     debugbar_arm_exit(403);
 }
 

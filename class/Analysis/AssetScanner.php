@@ -138,6 +138,11 @@ final class AssetScanner
         if (false === $realRoot) {
             return 0;
         }
+        // Terminate the prefix with a separator. A bare prefix compare lets a
+        // sibling directory through: with a root of /var/www/site, a resolved
+        // path of /var/www/site-backup/app.js also starts with it. Matches the
+        // form CachegrindCatalog::resolve() already uses.
+        $rootPrefix = rtrim($realRoot, '/\\') . DIRECTORY_SEPARATOR;
 
         foreach (array_unique($urls) as $url) {
             if (0 !== strpos($url, $rootUrl)) {
@@ -150,7 +155,7 @@ final class AssetScanner
             }
             $candidate = realpath($rootPath . '/' . ltrim($path, '/'));
             // realpath containment check keeps us inside the web root
-            if (false !== $candidate && 0 === strpos($candidate, $realRoot) && is_file($candidate)) {
+            if (false !== $candidate && str_starts_with($candidate, $rootPrefix) && is_file($candidate)) {
                 $bytes += (int) filesize($candidate);
             }
         }

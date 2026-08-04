@@ -602,6 +602,17 @@
 
             const diagnosticText = function (value) {
                 const context = value.context || {};
+                // Real values live in context_json; the plain context map carries
+                // the same keys with null, for rendering only (see the renderer
+                // below, which resolves the same way). Reading context[key]
+                // directly copied "key: null" to the clipboard and gave
+                // redactValue() nothing to mask.
+                const contextJsonData = value.context_json || {};
+                const contextValue = (key) => (
+                    Object.prototype.hasOwnProperty.call(contextJsonData, key)
+                        ? contextJsonData[key]
+                        : context[key]
+                );
                 const lines = [String(value.message ?? '')];
                 if (context.source) {
                     lines.push('Source: ' + String(context.source));
@@ -611,7 +622,7 @@
                 }
                 if (Object.keys(context).length > 0) {
                     lines.push('Context:\n' + Object.keys(context).map((key) => {
-                        const redacted = redactValue(key, context[key]);
+                        const redacted = redactValue(key, contextValue(key));
                         return key + ': ' + (redacted && typeof redacted === 'object'
                             ? JSON.stringify(redacted, null, 2)
                             : String(redacted));
