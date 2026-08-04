@@ -11,10 +11,10 @@ declare(strict_types=1);
 
 use Xmf\Module\Admin;
 use Xmf\Request;
-use XoopsModules\Debugbar\Admin\AccessPolicy;
 use XoopsModules\Debugbar\{
     Helper
 };
+use XoopsModules\Debugbar\Admin\AccessPolicy;
 
 /** @var Admin $adminObject */
 /** @var Helper $helper */

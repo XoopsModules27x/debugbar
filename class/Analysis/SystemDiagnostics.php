@@ -294,7 +294,7 @@ final class SystemDiagnostics
         }
 
         $config = \xoops_getDebugConfig();
-        if ([] === $config) {
+        if (! is_array($config) || [] === $config) {
             return $this->row('debug_file', 'Not present', 'ok', 'Production behaviour; no debug.php in xoops_data/data.');
         }
 
