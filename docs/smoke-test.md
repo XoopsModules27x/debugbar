@@ -4,25 +4,31 @@ Manual pass before tagging a release. Automated tests cover the classes; this
 covers the parts only a browser can see — gating, rendering, and the endpoints.
 
 Run the whole list on the newest supported core, then repeat the starred (*)
-items on the oldest one to confirm the floor still holds. As of 1.4.0 that means
-2.7.3 first, then 2.7.0/2.7.2.
+items on the older supported cores to confirm the floor still holds. As of 1.4.0
+that means 2.7.3 first, then 2.7.2 and 2.7.0 (`min_xoops` is 2.7.0).
 
 **Precondition that changes several results:** if `xoops_data/data/debug.php`
 enables debugbar, the admin pages stay reachable with Debug Mode off — that is
-the two-gate design, not a leak. Remove the debugbar block from `debug.php`
-before running section A, or expect section A's refusals not to fire.
+the two-gate design, not a leak. Section A states the debug.php state per row;
+elsewhere in this document, assume it is absent unless a step says otherwise.
 
 ## A. Activation and gating
 
-| # | Step | Expected |
-|---|---|---|
-| A1 | Debug Mode off, DebugBar preference on | No toolbar on the front end |
-| A2 | Debug Mode on, DebugBar preference off | No toolbar |
-| A3 | Both on, logged out * | No toolbar; no `beacon.php` or `explain.php` in the network tab |
-| A4 | `debug_mode = 3` (Smarty debug) | Toolbar renders **and** admin home reports XOOPS Debug enabled |
-| A5 | Add a debugbar block to `xoops_data/data/debug.php`, Debug Mode off | Toolbar renders; admin home says enabled by debug.php and warns the button cannot turn it off |
-| A6 | Remove that block | Toolbar disappears |
-| A7 | Log in as a non-admin with everything on * | No toolbar, no endpoint traffic |
+Each row states its own starting state, so they can be run in any order and one
+result cannot contaminate the next. "debug.php" means whether
+`xoops_data/data/debug.php` contains a debugbar block with `enabled => true`.
+
+| # | Debug Mode | Preference | debug.php | Signed in as | Expected |
+|---|---|---|---|---|---|
+| A1 | off (0) | on | absent | admin | No toolbar on the front end |
+| A2 | on (1) | off | absent | admin | No toolbar |
+| A3 * | on (1) | on | absent | logged out | No toolbar; no `beacon.php` or `explain.php` in the network tab |
+| A4 | 3 (Smarty) | on | absent | admin | Toolbar renders **and** admin home reports XOOPS Debug enabled |
+| A5 | off (0) | on | present | admin | Toolbar renders; admin home says enabled by debug.php and warns the button cannot turn it off |
+| A6 | off (0) | on | absent | admin | No toolbar — confirms A5's toolbar came from the file and nothing cached it |
+| A7 * | on (1) | on | absent | non-admin user | No toolbar, no endpoint traffic |
+| A8 | off (0) | on | absent | admin | Admin Analytics, Logs and Diagnostics all refuse |
+| A9 | off (0) | on | present | admin | Those same three pages are reachable — the file is the second gate, by design |
 
 ## B. Admin home
 

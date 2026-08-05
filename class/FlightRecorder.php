@@ -57,7 +57,13 @@ final class FlightRecorder
             if (preg_match('/^(\d{10})-([vr])-([a-f0-9]{16})\.json$/', $name, $m) !== 1) {
                 continue;
             }
-            $records[] = ['file' => $name, 'created' => (int) $m[1], 'violation' => $m[2] === 'v', 'request_id' => $m[3], 'bytes' => (int) filesize($file)];
+            // is_file() rather than a bare filesize(): glob() also matches a
+            // directory or a dangling symlink sitting at a record's path, and
+            // filesize() warns on both. This module collects PHP warnings, so
+            // one raised here would land in the panel this class feeds. A
+            // broken entry is still listed -- prune() has to see it to remove
+            // it -- it simply reports no bytes.
+            $records[] = ['file' => $name, 'created' => (int) $m[1], 'violation' => $m[2] === 'v', 'request_id' => $m[3], 'bytes' => is_file($file) ? (int) filesize($file) : 0];
         }
         usort($records, static fn (array $a, array $b): int => $b['created'] <=> $a['created']);
 

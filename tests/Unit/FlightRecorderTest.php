@@ -27,6 +27,13 @@ final class FlightRecorderTest extends TestCase
 
     protected function tearDown(): void
     {
+        // Refuse to sweep anything that is not the directory setUp() made. If
+        // setUp() failed before assigning, $dir is '' and the glob below would
+        // walk the filesystem root -- suppressed, so it would do it quietly.
+        if ('' === $this->dir || ! str_starts_with($this->dir, sys_get_temp_dir()) || ! is_dir($this->dir)) {
+            return;
+        }
+
         foreach ((array) glob($this->dir . '/*') as $path) {
             if (is_string($path)) {
                 is_dir($path) ? @rmdir($path) : @unlink($path);
