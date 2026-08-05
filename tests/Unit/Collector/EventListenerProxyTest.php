@@ -107,7 +107,7 @@ final class EventListenerProxyTest extends TestCase
         self::assertCount(1, $records);
         self::assertSame(1, $records[0]['listeners']);
         // The timing is taken in a finally, so it survives the throw. The
-        // listener sleeps 1ms precisely so this can assert a real duration
+        // listener sleeps 10ms precisely so this can assert a real duration
         // rather than a value indistinguishable from the 0.0 it starts at.
         self::assertGreaterThan(0.0, $records[0]['ms'], 'a throwing listener must still be timed');
     }

@@ -97,14 +97,16 @@ final class FlightRecorder
      * so continuing down it removes the next-best candidate rather than an
      * arbitrary one.
      *
-     * @return int how many removals the cap still needs and could not get
+     * Deliberately returns nothing. An earlier revision returned the shortfall,
+     * but no caller read it and no test could reach it, so it promised a signal
+     * that did not exist. It comes back the day a Diagnostics row consumes it.
      */
-    private function prune(int $maxFiles): int
+    private function prune(int $maxFiles): void
     {
         $records = $this->listRecords(PHP_INT_MAX);
         $overflow = count($records) - max(1, $maxFiles);
         if ($overflow <= 0) {
-            return 0;
+            return;
         }
         usort($records, static function (array $a, array $b): int {
             $violationOrder = $a['violation'] <=> $b['violation'];
@@ -115,14 +117,12 @@ final class FlightRecorder
         $removed = 0;
         foreach ($records as $record) {
             if ($removed >= $overflow) {
-                break;
+                return;
             }
             if ($this->removeFile($this->directory() . '/' . $record['file'])) {
                 $removed++;
             }
         }
-
-        return $overflow - $removed;
     }
 
     /**
