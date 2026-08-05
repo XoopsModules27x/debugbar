@@ -31,4 +31,7 @@
 /sonar-project.properties export-ignore
 /.git-blame-ignore-revs export-ignore
 /composer.lock          export-ignore
+# CHANGELOG.md deliberately SHIPS, diverging from the module-devops baseline.
+# It is the industry-standard location, and the About tab will read the release
+# history from it once docs/changelog.txt is retired.
 # /CHANGELOG.md           export-ignore
