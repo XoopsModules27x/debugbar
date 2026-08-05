@@ -87,10 +87,23 @@ final class FlightRecorder
             : (defined('XOOPS_VAR_PATH') ? XOOPS_VAR_PATH . '/debugbar' : XOOPS_ROOT_PATH . '/cache/debugbar');
     }
 
+    /**
+     * Bring the directory back to the cap, in priority order.
+     *
+     * Iterating past the initial overflow set matters: if the oldest record
+     * cannot be removed, stopping there leaves the directory over its cap while
+     * perfectly removable records sit further down the list. The sort already
+     * encodes the priority -- plain records before flagged ones, oldest first --
+     * so continuing down it removes the next-best candidate rather than an
+     * arbitrary one.
+     *
+     * @return int how many removals the cap still needs and could not get
+     */
     private function prune(int $maxFiles): int
     {
         $records = $this->listRecords(PHP_INT_MAX);
-        if (count($records) <= $maxFiles) {
+        $overflow = count($records) - max(1, $maxFiles);
+        if ($overflow <= 0) {
             return 0;
         }
         usort($records, static function (array $a, array $b): int {
@@ -99,14 +112,17 @@ final class FlightRecorder
             return $violationOrder !== 0 ? $violationOrder : ($a['created'] <=> $b['created']);
         });
 
-        $failed = 0;
-        foreach (array_slice($records, 0, count($records) - max(1, $maxFiles)) as $record) {
-            if (! $this->removeFile($this->directory() . '/' . $record['file'])) {
-                $failed++;
+        $removed = 0;
+        foreach ($records as $record) {
+            if ($removed >= $overflow) {
+                break;
+            }
+            if ($this->removeFile($this->directory() . '/' . $record['file'])) {
+                $removed++;
             }
         }
 
-        return $failed;
+        return $overflow - $removed;
     }
 
     /**
@@ -122,18 +138,23 @@ final class FlightRecorder
      * directory sitting at a record's path is skipped by the is_file() guard
      * without unlink ever being called, and Windows can report a delete that
      * leaves the entry in place while a handle is open.
+     *
+     * is_link() is tested alongside both because is_file() and file_exists()
+     * follow symlinks: a dangling link at a record's path would otherwise be
+     * skipped by the guard AND report as gone, while glob() goes on listing it --
+     * the same false success this method exists to prevent.
      */
     private function removeFile(string $path): bool
     {
         set_error_handler(static fn (): bool => true);
 
         try {
-            if (is_file($path)) {
+            if (is_file($path) || is_link($path)) {
                 unlink($path);
             }
             clearstatcache(true, $path);
 
-            return ! file_exists($path);
+            return ! (file_exists($path) || is_link($path));
         } finally {
             restore_error_handler();
         }

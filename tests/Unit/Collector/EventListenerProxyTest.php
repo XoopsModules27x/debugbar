@@ -92,15 +92,16 @@ final class EventListenerProxyTest extends TestCase
         // The proxy only observes; swallowing here would change behaviour core
         // already has. This is deliberately NOT the same case as the one above:
         // there the proxy invented the exception, here it is passing one on.
-        $propagated = false;
+        $propagated = null;
 
         try {
             self::dispatch($proxy, 'eventExplodes');
-        } catch (\RuntimeException) {
-            $propagated = true;
+        } catch (\RuntimeException $e) {
+            $propagated = $e;
         }
 
-        self::assertTrue($propagated, "the listener's exception must reach the caller unchanged");
+        self::assertInstanceOf(\RuntimeException::class, $propagated, "the listener's exception must reach the caller");
+        self::assertSame('listener failed', $propagated->getMessage(), 'and must reach it unchanged');
 
         $records = $spy->records();
         self::assertCount(1, $records);
@@ -141,8 +142,9 @@ final class RecordingListener
     {
         // Sleeps before throwing so the recorded duration is measurably above
         // the 0.0 a dispatch starts at -- otherwise "is still timed" could not
-        // be told apart from "was never timed".
-        usleep(1000);
+        // be told apart from "was never timed". 10ms rather than 1ms so the
+        // assertion holds on a CI host with a coarse timer.
+        usleep(10000);
 
         throw new \RuntimeException('listener failed');
     }

@@ -76,8 +76,12 @@ final class FlightRecorderTest extends TestCase
      * It is also the exact shape the old code was blind to: the is_file() guard
      * skipped it without ever calling unlink(), which is why removeFile() now
      * confirms the path is gone rather than trusting a return value.
+     *
+     * The cap is still met: prune() walks past a failed removal to the next
+     * candidate rather than giving up on the initial overflow set, so one stuck
+     * entry costs one other record rather than the whole guarantee.
      */
-    public function testARecordThatCannotBeRemovedIsNotCountedAsPruned(): void
+    public function testAnUnremovableRecordDoesNotStopTheCapBeingEnforced(): void
     {
         $stuck = $this->dir . '/0000000001-r-' . str_repeat('a', 16) . '.json';
         mkdir($stuck);
@@ -88,10 +92,9 @@ final class FlightRecorderTest extends TestCase
         }
 
         // record() still reports success, and should: the record it was asked to
-        // write was written. What must not happen is the directory quietly
-        // exceeding its cap with nothing anywhere able to say so.
-        self::assertDirectoryExists($stuck, 'the un-removable entry must still be there');
-        self::assertCount(31, $recorder->listRecords(PHP_INT_MAX), 'the survivor must still be counted');
+        // write was written.
+        self::assertDirectoryExists($stuck, 'the un-removable entry is still there');
+        self::assertCount(30, $recorder->listRecords(PHP_INT_MAX), 'the cap is met by removing the next candidate');
     }
 
     public function testAMalformedRequestIdIsRefusedBeforeAnythingIsWritten(): void
