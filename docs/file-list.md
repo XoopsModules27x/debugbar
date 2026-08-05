@@ -6,7 +6,7 @@ This inventory describes the standalone `modules/debugbar` release tree. The thr
 
 | Area | Files | Purpose |
 |---|---:|---|
-| Module root | 7 | Manifest, entry points, README, and changelog |
+| Module root | 9 | Manifest, entry points, README, changelog, licence, and the Composer manifest |
 | Administration | 8 | Home, Analytics, Logs, Diagnostics, navigation, and wrappers |
 | PHP classes | 27 | Collection, profiling, storage, diagnostics, event/template collectors, and optional Ray bridge |
 | Install and preload | 4 | Autoloading, lifecycle registration, schema/assets/key setup |
@@ -15,7 +15,7 @@ This inventory describes the standalone `modules/debugbar` release tree. The thr
 | SQL | 1 | Profile table definition |
 | Module asset overlay | 6 | XOOPS-specific styles and scripts reapplied during update |
 | Generated browser assets | 32 | Web-readable PHP DebugBar resources plus copied overlay files |
-| **Total** | **127** | Excludes the three review notes, and the development and CI files that `.gitattributes` marks `export-ignore` — `tests/`, `stubs/`, `testdata/`, `.github/`, and the tooling configs — none of which reach the release archive |
+| **Total** | **129** | Excludes the three review notes, and the development and CI files that `.gitattributes` marks `export-ignore` — `tests/`, `stubs/`, `testdata/`, `.github/`, and the tooling configs — none of which reach the release archive |
 
 ## Module-owned source tree
 
@@ -23,6 +23,8 @@ This inventory describes the standalone `modules/debugbar` release tree. The thr
 debugbar/
 |-- README.md
 |-- CHANGELOG.md
+|-- LICENSE
+|-- composer.json
 |-- xoops_version.php
 |-- index.php
 |-- explain.php

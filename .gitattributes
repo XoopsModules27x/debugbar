@@ -1,11 +1,10 @@
 # Path-based git attributes — XOOPS module DevOps baseline.
 # xoops-overlay:profile=core27
 # https://git-scm.com/docs/gitattributes
-
+# Stored with LF line endings, like everything else here.
 # Normalize line endings.
 * text=auto
 *.php text eol=lf
-
 # Keep development & CI files OUT of the release archive (git archive / GitHub release ZIP).
 /.github                export-ignore
 /.build                 export-ignore
@@ -13,8 +12,9 @@
 /tests                  export-ignore
 /testdata               export-ignore
 # /docs                   export-ignore
+/docs/00                export-ignore
+/docs/00/**             export-ignore
 /.editorconfig          export-ignore
-/.gitattributes         export-ignore
 /.gitignore             export-ignore
 /.php-cs-fixer.dist.php  export-ignore
 /.php-cs-fixer.cache     export-ignore
@@ -31,6 +31,7 @@
 /sonar-project.properties export-ignore
 /.git-blame-ignore-revs export-ignore
 /composer.lock          export-ignore
+/.gitattributes         export-ignore
 # CHANGELOG.md deliberately SHIPS, diverging from the module-devops baseline.
 # It is the industry-standard location, and the About tab will read the release
 # history from it once docs/changelog.txt is retired.
