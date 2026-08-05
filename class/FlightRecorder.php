@@ -57,7 +57,16 @@ final class FlightRecorder
             if (preg_match('/^(\d{10})-([vr])-([a-f0-9]{16})\.json$/', $name, $m) !== 1) {
                 continue;
             }
-            $records[] = ['file' => $name, 'created' => (int) $m[1], 'violation' => $m[2] === 'v', 'request_id' => $m[3], 'bytes' => (int) filesize($file)];
+            // is_file() rather than a bare filesize(): glob() also matches a
+            // directory or a dangling symlink sitting at a record's path, and
+            // filesize() warns on both. The suppression covers the remaining
+            // race -- a concurrent request's prune() can unlink a record between
+            // this check and the stat, exactly as DebugbarLogger documents for
+            // its own sweep. Either way a warning raised here would land in the
+            // panel this class feeds. A broken or vanished entry is still
+            // listed -- prune() has to see it to remove it -- it simply reports
+            // no bytes.
+            $records[] = ['file' => $name, 'created' => (int) $m[1], 'violation' => $m[2] === 'v', 'request_id' => $m[3], 'bytes' => is_file($file) ? (int) @filesize($file) : 0];
         }
         usort($records, static fn (array $a, array $b): int => $b['created'] <=> $a['created']);
 
@@ -87,10 +96,25 @@ final class FlightRecorder
             : (defined('XOOPS_VAR_PATH') ? XOOPS_VAR_PATH . '/debugbar' : XOOPS_ROOT_PATH . '/cache/debugbar');
     }
 
+    /**
+     * Bring the directory back to the cap, in priority order.
+     *
+     * Iterating past the initial overflow set matters: if the oldest record
+     * cannot be removed, stopping there leaves the directory over its cap while
+     * perfectly removable records sit further down the list. The sort already
+     * encodes the priority -- plain records before flagged ones, oldest first --
+     * so continuing down it removes the next-best candidate rather than an
+     * arbitrary one.
+     *
+     * Deliberately returns nothing. An earlier revision returned the shortfall,
+     * but no caller read it and no test could reach it, so it promised a signal
+     * that did not exist. It comes back the day a Diagnostics row consumes it.
+     */
     private function prune(int $maxFiles): void
     {
         $records = $this->listRecords(PHP_INT_MAX);
-        if (count($records) <= $maxFiles) {
+        $overflow = count($records) - max(1, $maxFiles);
+        if ($overflow <= 0) {
             return;
         }
         usort($records, static function (array $a, array $b): int {
@@ -98,21 +122,48 @@ final class FlightRecorder
 
             return $violationOrder !== 0 ? $violationOrder : ($a['created'] <=> $b['created']);
         });
-        foreach (array_slice($records, 0, count($records) - max(1, $maxFiles)) as $record) {
-            $this->removeFile($this->directory() . '/' . $record['file']);
+
+        $removed = 0;
+        foreach ($records as $record) {
+            if ($removed >= $overflow) {
+                return;
+            }
+            if ($this->removeFile($this->directory() . '/' . $record['file'])) {
+                $removed++;
+            }
         }
     }
 
-    private function removeFile(string $path): void
+    /**
+     * Remove one record, reporting whether it is actually gone.
+     *
+     * The error handler stays: this module captures PHP warnings, so a warning
+     * raised here would be collected into the very panel this class feeds.
+     * Suppressing the warning is right; suppressing the RESULT as well was the
+     * defect -- prune() could not tell a deletion from a no-op, so the retention
+     * cap was advisory while record() went on reporting success.
+     *
+     * Survival is confirmed rather than inferred from unlink()'s return: a
+     * directory sitting at a record's path is skipped by the is_file() guard
+     * without unlink ever being called, and Windows can report a delete that
+     * leaves the entry in place while a handle is open.
+     *
+     * is_link() is tested alongside both because is_file() and file_exists()
+     * follow symlinks: a dangling link at a record's path would otherwise be
+     * skipped by the guard AND report as gone, while glob() goes on listing it --
+     * the same false success this method exists to prevent.
+     */
+    private function removeFile(string $path): bool
     {
-        if (! is_file($path)) {
-            return;
-        }
-
         set_error_handler(static fn (): bool => true);
 
         try {
-            unlink($path);
+            if (is_file($path) || is_link($path)) {
+                unlink($path);
+            }
+            clearstatcache(true, $path);
+
+            return ! (file_exists($path) || is_link($path));
         } finally {
             restore_error_handler();
         }
