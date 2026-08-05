@@ -87,32 +87,53 @@ final class FlightRecorder
             : (defined('XOOPS_VAR_PATH') ? XOOPS_VAR_PATH . '/debugbar' : XOOPS_ROOT_PATH . '/cache/debugbar');
     }
 
-    private function prune(int $maxFiles): void
+    private function prune(int $maxFiles): int
     {
         $records = $this->listRecords(PHP_INT_MAX);
         if (count($records) <= $maxFiles) {
-            return;
+            return 0;
         }
         usort($records, static function (array $a, array $b): int {
             $violationOrder = $a['violation'] <=> $b['violation'];
 
             return $violationOrder !== 0 ? $violationOrder : ($a['created'] <=> $b['created']);
         });
+
+        $failed = 0;
         foreach (array_slice($records, 0, count($records) - max(1, $maxFiles)) as $record) {
-            $this->removeFile($this->directory() . '/' . $record['file']);
+            if (! $this->removeFile($this->directory() . '/' . $record['file'])) {
+                $failed++;
+            }
         }
+
+        return $failed;
     }
 
-    private function removeFile(string $path): void
+    /**
+     * Remove one record, reporting whether it is actually gone.
+     *
+     * The error handler stays: this module captures PHP warnings, so a warning
+     * raised here would be collected into the very panel this class feeds.
+     * Suppressing the warning is right; suppressing the RESULT as well was the
+     * defect -- prune() could not tell a deletion from a no-op, so the retention
+     * cap was advisory while record() went on reporting success.
+     *
+     * Survival is confirmed rather than inferred from unlink()'s return: a
+     * directory sitting at a record's path is skipped by the is_file() guard
+     * without unlink ever being called, and Windows can report a delete that
+     * leaves the entry in place while a handle is open.
+     */
+    private function removeFile(string $path): bool
     {
-        if (! is_file($path)) {
-            return;
-        }
-
         set_error_handler(static fn (): bool => true);
 
         try {
-            unlink($path);
+            if (is_file($path)) {
+                unlink($path);
+            }
+            clearstatcache(true, $path);
+
+            return ! file_exists($path);
         } finally {
             restore_error_handler();
         }
