@@ -175,9 +175,18 @@ if ($action === 'set_tracy') {
             $existing = file_get_contents($runtimeFile);
             if (is_string($existing) && trim($existing) !== '') {
                 $decoded = json_decode($existing, true);
-                if (is_array($decoded)) {
-                    $current = $decoded;
+                if (! is_array($decoded)) {
+                    // The file holds something, but not a JSON object we can merge into --
+                    // malformed, or a valid non-object scalar. Overwriting it would drop
+                    // whatever it carries, including the core's error_screen_owner record
+                    // (kept in this same file since 2.7.3). Fail the toggle and leave the
+                    // file untouched for inspection rather than replacing it blind.
+                    flock($lockHandle, LOCK_UN);
+                    fclose($lockHandle);
+                    redirect_header('index.php', 3, _AM_DEBUGBAR_TRACY_FAILED);
+                    exit;
                 }
+                $current = $decoded;
             }
         }
         $current['tracy_enabled'] = $enabled;
