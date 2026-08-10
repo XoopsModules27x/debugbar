@@ -1,3 +1,12 @@
+<h5>1.4.1 - [2026-08-08]</h5>
+<hr>
+
+<strong>Changed</strong>
+- The Diagnostics row for the error screen now reports who actually owns PHP's handlers rather than whether Tracy is installed. It read XOOPS_TRACY_STATUS, so a site running xWhoops saw "Not installed" while Whoops held the handlers. XOOPS 2.7.3 publishes XOOPS_ERROR_SCREEN_OWNER / _SOURCE / _STATUS / _MESSAGE for any provider, and the row reads those. The Tracy library keeps a plain package row alongside Whoops.
+
+<strong>Fixed</strong>
+- The Tracy toolbar toggle no longer erases the rest of xoops_data/data/debug-runtime.json. It wrote the file wholesale, which was harmless while tracy_enabled was the only key in it; since 2.7.3 the core keeps the recorded error-screen owner there, so one press of the button dropped that record. The toggle now writes through the core's xoops_writeDebugRuntimeOverride(), which merges rather than replaces.
+
 <h5>1.4.0 - [2026-08-04]</h5>
 <hr>
 

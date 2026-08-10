@@ -70,6 +70,7 @@ $labels = [
     'whoops' => _AM_DEBUGBAR_DIAG_WHOOPS,
     'ray' => _AM_DEBUGBAR_RAY,
     'tracy' => _AM_DEBUGBAR_DIAG_TRACY,
+    'error_screen' => _AM_DEBUGBAR_DIAG_ERROR_SCREEN,
     'explain_stash' => _AM_DEBUGBAR_DIAG_EXPLAIN_STASH,
     'logs' => _AM_DEBUGBAR_DIAG_LOG_DIR,
     'caches' => _AM_DEBUGBAR_DIAG_CACHE_DIR,
