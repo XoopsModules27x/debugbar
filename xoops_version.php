@@ -23,7 +23,7 @@ $modversion = [];
 
 // --- Module Info ---
 $modversion['version']      = '1.4.1';
-$modversion['release_date'] = '2026/08/07';
+$modversion['release_date'] = '2026/08/08';
 $modversion['name']         = _MI_DEBUGBAR_NAME;
 $modversion['description']  = _MI_DEBUGBAR_DSC;
 $modversion['author']       = 'XOOPS Project';

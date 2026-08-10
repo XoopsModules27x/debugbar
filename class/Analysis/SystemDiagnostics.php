@@ -169,12 +169,25 @@ final class SystemDiagnostics
             ? (string) \xoops_getErrorScreenOwner()
             : '';
 
-        // 'whoops' declared while core still holds the ERROR handler is the designed
-        // outcome, not drift: xwhoops returns the error handler immediately after
-        // register() and keeps only the exception and shutdown handlers.
+        // Compare like with like. $detected is a LIBRARY name (whoops, tracy); $declared
+        // is a MODULE DIRNAME (xwhoops, xtracy) or a legacy alias a provider still answers
+        // to (whoops, tracy). Without normalising both to the canonical dirname, every
+        // healthy install reported false drift -- 'whoops' never equals 'xwhoops'.
+        $canonical = static fn (string $token): string => match ($token) {
+            'whoops' => 'xwhoops',
+            'tracy' => 'xtracy',
+            default => $token,
+        };
+        $declaredCanon = $canonical($declared);
+        $detectedCanon = $canonical($detected);
+
+        // xwhoops declared while core still holds the ERROR handler is the designed
+        // outcome, not drift: xwhoops hands the error handler back immediately after
+        // register() and keeps only the exception and shutdown handlers, so the error
+        // handler this row probes is XoopsLogger's ('core').
         $agrees = '' === $declared
-            || $detected === $declared
-            || ('whoops' === $declared && 'core' === $detected);
+            || $detectedCanon === $declaredCanon
+            || ('xwhoops' === $declaredCanon && 'core' === $detected);
 
         return $this->row(
             'error_handler',
@@ -334,6 +347,23 @@ final class SystemDiagnostics
     private function errorScreenRow(): array
     {
         if (! defined('XOOPS_ERROR_SCREEN_STATUS')) {
+            // On a core too old for the seam, the legacy XOOPS_TRACY_STATUS may still be
+            // published by an older xtracy. Map it rather than reporting a blank 'Unknown'
+            // and discarding an actionable Tracy initialisation failure; only when neither
+            // contract exists is the answer genuinely unknown.
+            if (defined('XOOPS_TRACY_STATUS')) {
+                $tracyStatus = (string) constant('XOOPS_TRACY_STATUS');
+                $tracyDetail = defined('XOOPS_TRACY_MESSAGE') ? (string) constant('XOOPS_TRACY_MESSAGE') : '';
+
+                return match ($tracyStatus) {
+                    'active' => $this->row('error_screen', 'Tracy', 'ok', $tracyDetail),
+                    'incompatible' => $this->row('error_screen', 'Incompatible', 'warning', $tracyDetail),
+                    'error' => $this->row('error_screen', 'Failed to start', 'warning', $tracyDetail),
+                    'missing' => $this->row('error_screen', 'Library missing', 'warning', $tracyDetail),
+                    default => $this->row('error_screen', 'Disabled', 'info', $tracyDetail),
+                };
+            }
+
             return $this->row(
                 'error_screen',
                 'Unknown',

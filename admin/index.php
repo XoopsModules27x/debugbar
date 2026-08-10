@@ -148,21 +148,62 @@ if ($action === 'set_tracy') {
         redirect_header('index.php', 3, _AM_DEBUGBAR_TRACY_FAILED);
         exit;
     }
-    $runtimeFile = $runtimeBase . '/data/debug-runtime.json';
+    // Merge, do not overwrite. Since 2.7.3 the core keeps the recorded error-screen owner
+    // in this same file, written when a provider claims the screen at install. Writing it
+    // wholesale -- as this once did -- dropped that record, and the site fell back to core
+    // error handling on the next request. Prefer the core's own writer, which merges and
+    // writes through a temp file + atomic rename; on an older core, do the equivalent by
+    // hand under a lock so the two paths behave the same and neither loses another key.
+    if (\function_exists('xoops_writeDebugRuntimeOverride')) {
+        if (! xoops_writeDebugRuntimeOverride(['tracy_enabled' => $enabled])) {
+            redirect_header('index.php', 3, _AM_DEBUGBAR_TRACY_FAILED);
+            exit;
+        }
+    } else {
+        $runtimeFile = $runtimeBase . '/data/debug-runtime.json';
+        $lockHandle = @fopen($runtimeBase . '/data/debug-runtime.lock', 'c');
+        if ($lockHandle === false || ! flock($lockHandle, LOCK_EX)) {
+            if ($lockHandle !== false) {
+                fclose($lockHandle);
+            }
+            redirect_header('index.php', 3, _AM_DEBUGBAR_TRACY_FAILED);
+            exit;
+        }
 
-    try {
-        $runtimeJson = json_encode(
-            ['tracy_enabled' => $enabled],
-            JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR
-        );
-    } catch (\JsonException) {
-        redirect_header('index.php', 3, _AM_DEBUGBAR_TRACY_FAILED);
-        exit;
-    }
+        $current = [];
+        if (is_file($runtimeFile)) {
+            $existing = file_get_contents($runtimeFile);
+            if (is_string($existing) && trim($existing) !== '') {
+                $decoded = json_decode($existing, true);
+                if (is_array($decoded)) {
+                    $current = $decoded;
+                }
+            }
+        }
+        $current['tracy_enabled'] = $enabled;
 
-    if (file_put_contents($runtimeFile, $runtimeJson . PHP_EOL, LOCK_EX) === false) {
-        redirect_header('index.php', 3, _AM_DEBUGBAR_TRACY_FAILED);
-        exit;
+        try {
+            $runtimeJson = json_encode(
+                $current,
+                JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR
+            );
+        } catch (\JsonException) {
+            flock($lockHandle, LOCK_UN);
+            fclose($lockHandle);
+            redirect_header('index.php', 3, _AM_DEBUGBAR_TRACY_FAILED);
+            exit;
+        }
+
+        $temporary = $runtimeFile . '.' . getmypid() . '.tmp';
+        $written = file_put_contents($temporary, $runtimeJson . PHP_EOL) !== false
+            && rename($temporary, $runtimeFile);
+        flock($lockHandle, LOCK_UN);
+        fclose($lockHandle);
+        if (! $written) {
+            @unlink($temporary);
+            redirect_header('index.php', 3, _AM_DEBUGBAR_TRACY_FAILED);
+            exit;
+        }
     }
 
     redirect_header('index.php', 2, $enabled ? _AM_DEBUGBAR_TRACY_ENABLED_MSG : _AM_DEBUGBAR_TRACY_DISABLED_MSG);
