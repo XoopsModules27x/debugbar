@@ -64,7 +64,8 @@ final class SystemDiagnostics
                 $this->packageRow('monolog', ['monolog/monolog']),
                 $this->packageRow('whoops', ['filp/whoops']),
                 $this->packageRow('ray', ['spatie/ray', 'spatie/global-ray'], function_exists('ray')),
-                $this->tracyBootstrapRow(),
+                $this->packageRow('tracy', ['tracy/tracy']),
+                $this->errorScreenRow(),
                 $this->explainStashRow(),
             ],
             'storage' => [
@@ -316,22 +317,56 @@ final class SystemDiagnostics
         );
     }
 
-    /** @return array{id: string, value: string, status: string, detail: string} */
-    private function tracyBootstrapRow(): array
+    /**
+     * Who owns PHP's error and exception handlers, from the horse's mouth.
+     *
+     * This used to be a Tracy-shaped row reading XOOPS_TRACY_STATUS, which told the truth
+     * on a Tracy site and nothing at all on any other: a site running xWhoops saw "Not
+     * installed" while Whoops was holding the handlers. The row was named for the tool
+     * somebody happened to be using rather than for the question being asked.
+     *
+     * XOOPS 2.7.3 publishes the answer for ANY provider, so read that instead. Falls back
+     * to a package check on an older core, where the constants do not exist -- an absent
+     * constant is a statement in itself: this core predates the seam.
+     *
+     * @return array{id: string, value: string, status: string, detail: string}
+     */
+    private function errorScreenRow(): array
     {
-        if (! defined('XOOPS_TRACY_STATUS')) {
-            return $this->packageRow('tracy', ['tracy/tracy']);
+        if (! defined('XOOPS_ERROR_SCREEN_STATUS')) {
+            return $this->row(
+                'error_screen',
+                'Unknown',
+                'info',
+                'This XOOPS predates the error-screen seam, so nothing publishes who owns the handlers.'
+            );
         }
 
-        $bootstrapStatus = (string) XOOPS_TRACY_STATUS;
-        $detail = defined('XOOPS_TRACY_MESSAGE') ? (string) XOOPS_TRACY_MESSAGE : '';
+        $status = (string) XOOPS_ERROR_SCREEN_STATUS;
+        $owner = defined('XOOPS_ERROR_SCREEN_OWNER') ? (string) XOOPS_ERROR_SCREEN_OWNER : '';
+        $source = defined('XOOPS_ERROR_SCREEN_SOURCE') ? (string) XOOPS_ERROR_SCREEN_SOURCE : '';
+        $detail = defined('XOOPS_ERROR_SCREEN_MESSAGE') ? (string) XOOPS_ERROR_SCREEN_MESSAGE : '';
 
-        return match ($bootstrapStatus) {
-            'active' => $this->row('tracy', 'Active', 'ok', $detail),
-            'incompatible' => $this->row('tracy', 'Incompatible', 'warning', $detail),
-            'error' => $this->row('tracy', 'Initialization failed', 'warning', $detail),
-            'missing' => $this->row('tracy', 'Not installed', 'warning', $detail),
-            default => $this->row('tracy', 'Disabled', 'info', $detail),
+        if ('' !== $source && 'core' !== $owner) {
+            $detail = trim($detail . ' (owner "' . $owner . '", from ' . $source . ')');
+        }
+
+        // 'core' is not a problem and must not read as one -- it is what a site without a
+        // provider is supposed to look like. The warnings are reserved for the states
+        // where somebody configured something and it is not doing what they think.
+        return match ($status) {
+            'core' => $this->row('error_screen', 'XoopsLogger', 'info', $detail),
+            'active' => $this->row('error_screen', $owner, 'ok', $detail),
+            'dormant' => $this->row('error_screen', 'Dormant', 'info', $detail),
+            'disabled' => $this->row('error_screen', 'Disabled', 'info', $detail),
+            'suppressed' => $this->row('error_screen', 'Suppressed', 'info', $detail),
+            'unclaimed' => $this->row('error_screen', 'Unclaimed', 'warning', $detail),
+            'contested' => $this->row('error_screen', 'Contested', 'warning', $detail),
+            'error' => $this->row('error_screen', 'Failed to start', 'warning', $detail),
+            'missing' => $this->row('error_screen', 'Library missing', 'warning', $detail),
+            'incompatible' => $this->row('error_screen', 'Incompatible', 'warning', $detail),
+            // A provider may report anything; core publishes it verbatim and so do we.
+            default => $this->row('error_screen', ucfirst($status), 'info', $detail),
         };
     }
 

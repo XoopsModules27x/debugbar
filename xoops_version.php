@@ -22,8 +22,8 @@ xoops_loadLanguage('modinfo', basename(__DIR__));
 $modversion = [];
 
 // --- Module Info ---
-$modversion['version']      = '1.4.0';
-$modversion['release_date'] = '2026/08/04';
+$modversion['version']      = '1.4.1';
+$modversion['release_date'] = '2026/08/07';
 $modversion['name']         = _MI_DEBUGBAR_NAME;
 $modversion['description']  = _MI_DEBUGBAR_DSC;
 $modversion['author']       = 'XOOPS Project';

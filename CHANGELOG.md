@@ -4,6 +4,16 @@ All notable changes to the XOOPS DebugBar module are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses semantic versioning.
 
+## [1.4.1] - 2026-08-08
+
+### Changed
+
+- The Diagnostics row for the error screen now reports who actually owns PHP's handlers, instead of reporting whether Tracy is installed. It read `XOOPS_TRACY_STATUS`, so on a site running xWhoops it said "Not installed" while Whoops was holding the handlers — the row was named for the tool somebody happened to be using rather than for the question being asked. XOOPS 2.7.3 publishes `XOOPS_ERROR_SCREEN_OWNER` / `_SOURCE` / `_STATUS` / `_MESSAGE` for any provider, so the row reads those: the owner token as its value, the core's own sentence as its detail. `core`, `dormant`, `disabled` and `suppressed` are informational — a site with no error-screen provider is supposed to look like that — while `unclaimed`, `contested`, `error`, `missing` and `incompatible` are flagged for review. A status a provider invented is shown verbatim, because the core publishes it verbatim. The Tracy library keeps a plain package row of its own alongside Whoops, which is the honest thing for a package check to report. On a core that predates the seam the row says so, since an absent constant is a statement in itself.
+
+### Fixed
+
+- The Tracy toolbar toggle no longer erases the rest of `xoops_data/data/debug-runtime.json`. It wrote the file wholesale, which was harmless while `tracy_enabled` was the only key in it. Since XOOPS 2.7.3 the core keeps the recorded error-screen owner there — written when a provider module claims the screen at install — so one press of the button dropped that record and the site fell back to core error handling on the next request. The toggle now writes through the core's own `xoops_writeDebugRuntimeOverride()`, which merges rather than replaces and writes via a temporary file and rename so a reader never sees a half-written file. On a core that predates that function the module merges by hand instead, so both paths behave the same.
+
 ## [1.4.0] - 2026-08-04
 
 Reconciles this module with the parallel copy maintained on the XMF 2.0 line, harvesting what that line did better and fixing three features that had shipped without working.

@@ -172,6 +172,7 @@ declare(strict_types=1);
 \define('_AM_DEBUGBAR_DIAG_OPCACHE', 'OPcache extension');
 \define('_AM_DEBUGBAR_DIAG_WHOOPS', 'Whoops library');
 \define('_AM_DEBUGBAR_DIAG_TRACY', 'Tracy library');
+\define('_AM_DEBUGBAR_DIAG_ERROR_SCREEN', 'Error screen owner');
 \define('_AM_DEBUGBAR_DIAG_EXPLAIN_SECRET', 'EXPLAIN signing key');
 \define('_AM_DEBUGBAR_DIAG_LOG_DIR', 'XOOPS log directory');
 \define('_AM_DEBUGBAR_DIAG_CACHE_DIR', 'XOOPS cache directory');
