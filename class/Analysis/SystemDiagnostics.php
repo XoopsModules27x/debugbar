@@ -62,7 +62,7 @@ final class SystemDiagnostics
                 $this->extensionRow('opcache', extension_loaded('Zend OPcache'), $this->opcacheDetail()),
                 $this->packageRow('php_debugbar', ['php-debugbar/php-debugbar', 'maximebf/debugbar']),
                 $this->packageRow('monolog', ['monolog/monolog']),
-                $this->packageRow('whoops', ['filp/whoops']),
+                $this->packageRow('whoops', ['filp/whoops'], false, ['xwhoops' => 'filp/whoops']),
                 $this->packageRow('ray', ['spatie/ray', 'spatie/global-ray'], function_exists('ray')),
                 $this->packageRow('tracy', ['tracy/tracy']),
                 $this->errorScreenRow(),
@@ -113,10 +113,28 @@ final class SystemDiagnostics
      * Composer metadata is inspected without loading optional runtime classes.
      * This prevents an incompatible diagnostics package from breaking this page.
      *
-     * @param list<string> $packages
+     * $moduleVendors is the fallback, and it exists because Composer\InstalledVersions
+     * answers "is this package AUTOLOADED IN THIS REQUEST", not "is this package
+     * installed". The difference is invisible for DebugBar's own dependencies, whose
+     * autoloader this page has by definition already loaded, and decisive for a package
+     * living in another module's vendor directory that is required lazily.
+     *
+     * filp/whoops is the case that exposed it. xwhoops loads its autoloader only after it
+     * has decided to render, so on every request where xwhoops legitimately stood down --
+     * not a developer request, a different declared owner, or the ungranted use_xwhoops
+     * permission that used to gate it -- this row read "Not installed" on a site where the
+     * library was present and working. Reporting a missing dependency for what is actually
+     * a configuration state sends the administrator to composer for a problem composer
+     * cannot fix.
+     *
+     * So: ask Composer first, and when it says no, look on disk before saying so.
+     *
+     * @param list<string>          $packages
+     * @param array<string, string> $moduleVendors dirname => package, checked on disk when
+     *                                            Composer has not seen the package
      * @return array{id: string, value: string, status: string, detail: string}
      */
-    private function packageRow(string $id, array $packages, bool $active = false): array
+    private function packageRow(string $id, array $packages, bool $active = false, array $moduleVendors = []): array
     {
         foreach ($packages as $package) {
             if (! $this->packageInstalled($package)) {
@@ -127,6 +145,28 @@ final class SystemDiagnostics
             $detail = $package . ($version !== null ? ' ' . $version : '');
 
             return $this->row($id, $active ? 'Active' : 'Installed', $active ? 'ok' : 'info', $detail);
+        }
+
+        foreach ($moduleVendors as $dirname => $package) {
+            $path = $this->rootPath . DIRECTORY_SEPARATOR . 'modules'
+                . DIRECTORY_SEPARATOR . $dirname
+                . DIRECTORY_SEPARATOR . 'vendor'
+                . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $package);
+
+            if (! is_dir($path)) {
+                continue;
+            }
+
+            // Deliberately NOT reported as a problem. "Present but not loaded" is the
+            // normal resting state of a provider that has not been asked to render, and
+            // the row that answers whether it SHOULD have rendered is errorScreenRow()
+            // immediately below -- which reads the seam and gives the actual reason.
+            return $this->row(
+                $id,
+                'Installed',
+                'info',
+                $package . ' in modules/' . $dirname . '/vendor (not loaded in this request)'
+            );
         }
 
         return $this->row($id, 'Not installed', 'info');
