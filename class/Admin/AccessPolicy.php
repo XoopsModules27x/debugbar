@@ -142,15 +142,22 @@ final class AccessPolicy
      * Same three-way decision as isAllowed(), but "admin" is the raw
      * $GLOBALS['xoopsUserIsAdmin'] flag rather than xoops_isDeveloperRequest().
      * That is deliberate, and it is what the preload has always used to decide
-     * whether to render the bar. Reusing the strict gate here would diverge on
-     * two axes that the toolbar does not care about:
+     * whether to render the bar. Reusing the strict gate here diverged on two
+     * axes that the toolbar does not care about. One has since closed:
      *
      *  - xoops_isDeveloperRequest() additionally requires XOOPS_GROUP_ADMIN
      *    membership, so a delegated module admin would see the bar and get 403
-     *    from every button on it;
-     *  - it accepts only debug_mode 1 or 2, while the bar renders for any
-     *    non-zero value — debug_mode 3 (Smarty debug) would render a toolbar
-     *    whose endpoints all refuse.
+     *    from every button on it. STILL OPEN, and not a defect — it is the whole
+     *    reason there are two wrappers. These pages expose site-wide SQL,
+     *    sessions and configuration accumulated across other people's requests;
+     *    the toolbar exposes one request. Collapsing them either locks delegated
+     *    module admins out of the bar or lets them into the history. Do not
+     *    "simplify" this without deciding which of those you want;
+     *  - it accepted only debug_mode 1 or 2, while the bar renders for any
+     *    non-zero value, so debug_mode 3 (Smarty debug) rendered a toolbar whose
+     *    endpoints all refused. CLOSED: XOOPS 2.7.3 widened the gate to any
+     *    non-zero mode, on the argument this module made first — the preference
+     *    names which debug facility, not how much debugging.
      *
      * The endpoints are still not open: each one additionally requires its own
      * server-minted XoopsSecurity token, and they expose only the caller's own

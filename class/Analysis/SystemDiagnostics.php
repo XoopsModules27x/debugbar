@@ -62,7 +62,7 @@ final class SystemDiagnostics
                 $this->extensionRow('opcache', extension_loaded('Zend OPcache'), $this->opcacheDetail()),
                 $this->packageRow('php_debugbar', ['php-debugbar/php-debugbar', 'maximebf/debugbar']),
                 $this->packageRow('monolog', ['monolog/monolog']),
-                $this->packageRow('whoops', ['filp/whoops']),
+                $this->packageRow('whoops', ['filp/whoops'], false, ['xwhoops' => 'filp/whoops']),
                 $this->packageRow('ray', ['spatie/ray', 'spatie/global-ray'], function_exists('ray')),
                 $this->packageRow('tracy', ['tracy/tracy']),
                 $this->errorScreenRow(),
@@ -113,10 +113,36 @@ final class SystemDiagnostics
      * Composer metadata is inspected without loading optional runtime classes.
      * This prevents an incompatible diagnostics package from breaking this page.
      *
-     * @param list<string> $packages
+     * $moduleVendors is the fallback, and it exists because Composer\InstalledVersions
+     * reports the packages of every Composer autoloader REGISTERED in this request -- not
+     * every package present on disk. The distinction is invisible for DebugBar's own
+     * dependencies, whose autoloader this page has by definition already registered, and
+     * decisive for a package in another module's vendor directory loaded lazily.
+     *
+     * filp/whoops is the case that exposed it. xwhoops requires its autoloader only once
+     * it has decided to render, so on every request where it legitimately stood down --
+     * not a developer request, a different declared owner, the use_xwhoops permission
+     * withheld -- its packages were absent from that metadata although installed, and this
+     * row read "Not installed". Reporting a missing dependency for what is actually a
+     * configuration state sends the administrator to composer for a problem composer
+     * cannot fix.
+     *
+     * So: ask Composer first, and when it has nothing, look on disk before saying no.
+     *
+     * The disk test requires the package's own composer.json, not merely the directory. An
+     * interrupted install, a partial upload or a hand-copied tree can leave the directory
+     * present and the package unusable, and "Installed" is a worse answer there than "Not
+     * installed" -- it is the same class of false confidence this fallback exists to
+     * remove, pointing the other way. No version is reported, because reading one would
+     * mean parsing that file, and this page's contract is to inspect metadata without
+     * loading or interpreting optional packages.
+     *
+     * @param list<string>          $packages
+     * @param array<string, string> $moduleVendors dirname => package, checked on disk when
+     *                                            Composer's metadata does not carry it
      * @return array{id: string, value: string, status: string, detail: string}
      */
-    private function packageRow(string $id, array $packages, bool $active = false): array
+    private function packageRow(string $id, array $packages, bool $active = false, array $moduleVendors = []): array
     {
         foreach ($packages as $package) {
             if (! $this->packageInstalled($package)) {
@@ -127,6 +153,29 @@ final class SystemDiagnostics
             $detail = $package . ($version !== null ? ' ' . $version : '');
 
             return $this->row($id, $active ? 'Active' : 'Installed', $active ? 'ok' : 'info', $detail);
+        }
+
+        foreach ($moduleVendors as $dirname => $package) {
+            $path = $this->rootPath . DIRECTORY_SEPARATOR . 'modules'
+                . DIRECTORY_SEPARATOR . $dirname
+                . DIRECTORY_SEPARATOR . 'vendor'
+                . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $package);
+
+            if (! is_dir($path) || ! is_file($path . DIRECTORY_SEPARATOR . 'composer.json')) {
+                continue;
+            }
+
+            // Deliberately NOT reported as a problem. "Installed but not registered" is
+            // the normal resting state of a provider that has not been asked to render,
+            // and the row answering whether it SHOULD have rendered is errorScreenRow()
+            // immediately below -- which reads the seam and gives the actual reason.
+            return $this->row(
+                $id,
+                'Installed',
+                'info',
+                $package . ' in modules/' . $dirname . '/vendor'
+                . ' (present on disk; not registered with Composer in this request)'
+            );
         }
 
         return $this->row($id, 'Not installed', 'info');
